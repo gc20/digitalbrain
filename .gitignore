@@ -1,0 +1,6 @@
+.DS_Store
+prod/
+staging/
+log/
+input/
+*.db
