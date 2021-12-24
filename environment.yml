@@ -10,6 +10,7 @@ CacheControl==0.12.10
 cachy==0.3.0
 catalogue==2.0.6
 certifi==2021.10.8
+chardet==4.0.0
 charset-normalizer==2.0.9
 cleo==0.8.1
 click==8.0.3
@@ -80,6 +81,7 @@ python-dateutil @ file:///tmp/build/80754af9/python-dateutil_1626374649649/work
 PyYAML==6.0
 pyzmq @ file:///opt/concourse/worker/volumes/live/7dec6841-64b1-4d95-7226-ce37c6ca8915/volume/pyzmq_1638435000749/work
 rake-nltk==1.0.6
+readability-lxml==0.8.1
 regex==2021.11.10
 requests==2.26.0
 requests-file==1.5.1

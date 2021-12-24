@@ -1,23 +1,20 @@
 ## PLAN
-# 1] Readability
-#   - Safari-like linking?
-#   - Render as iframe using plug-in?
-#   - Link to images/pdf/mp4?
-# 2] Linking
+# 1] Linking
 #   - Semantic similarity between notes
 #   - Semantic similarity between paragraphs
 #   - Chronological linking between pages
-# 3] Keywords
+# 2] Keywords
+#   - Quality check
 #   - Yake
 #   - Cross-document
 #   - Deep tagging turn-on
-# 4] More Data
+# 3] More Data
 #   - Chrome history (parse)
 #   - Kindle highlights
 #   - Twitter history (by hashtag?, pull related actions)
-# 5] Chrome Extension
+# 4] Chrome Extension
 #   - Show recommendations while browsing ("link to my vault" -> similarity + keywords)
-# 6] Later
+# 5] Later
 #   - Misc (images/PDF, language, summarization, failures, domain removal)
 
 ## Sample commands
@@ -34,7 +31,7 @@ import validators
 import leveldb # consider plyvel
 import time
 import json
-import newspaper # https://github.com/codelucas/newspaper
+import collections
 import re
 import pathlib
 import bookmarks_parser
@@ -42,14 +39,18 @@ import tqdm
 import random
 import tldextract
 import datetime
-# import nltk
 import spacy
+import readability
+import newspaper # https://github.com/codelucas/newspaper
+import bs4
+import markdownify
+# import nltk
 # import yake
 
 # NLP
-# nltk.download('punkt')
 # python -m spacy download en_core_web_sm
 spacy_nlp = spacy.load("en_core_web_lg")
+# nltk.download('punkt')
 # yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=20, features=None)
 
 # Arguments
@@ -112,33 +113,46 @@ def process_url(candidate, html_path, md_path, process_log):
     with open(url_path, "rb") as f:
         html = f.read()
 
-    # Parse + process article
-    article = newspaper.Article('')
-    article.set_html(html)
-    article.parse()
-    # article.nlp()
+    # Get HTML & markdown
+    readability_article = readability.Document(html)
+    title = readability_article.title()
+    html_content = readability_article.summary()
+    md_content = markdownify.markdownify(html_content)
+    if not title or not html_content or not md_content:
+        return 0, "Could not extract meaningful content"
+
+    # Get text
+    newspaper_article = newspaper.Article('')
+    newspaper_article.set_html(html_content)
+    newspaper_article.parse()
+    text_content = newspaper_article.text
+    # soup = bs4.BeautifulSoup(html_content, features="lxml")
+    # text_content = soup.get_text('\n')
+    if len(text_content) < 10:
+        return 0, "Text <10 chars"
+
+    # Get keywords
+    spacy_doc = spacy_nlp(text_content)
+    keywords_raw, entity_marks = collections.defaultdict(int), []
+    for e in spacy_doc.ents:
+        if e.label_ not in set(['DATE', 'PERCENT', 'CARDINAL', 'MONEY', 'TIME', 'ORDINAL']):
+            if not re.search(r'\s\s', e.text):
+                keyword = re.sub(r'[\s\,\&\\\/\[\]\(\)\.\+\'\"\’]', '-', e.text)
+                keyword = re.sub(r'[\-]+', '-', keyword)
+                keyword = "#" + keyword.strip("-")
+                if len(keyword) >= 3:
+                    keywords_raw[keyword] += 1
+                    entity_marks.append((e.start_char, e.end_char))
+    keywords = [keyword for keyword, _ in sorted(keywords_raw.items(), key=lambda x: x[1], reverse=True)]
 
     # Title
-    title = article.title or '<Untitled>'
     title = re.sub(r'[\\\/\:]', ' ', title)
     title = re.sub(r'\s+', ' ', title)
     title = title.strip()
 
-    # Content & keywords
-    if len(article.text) < 10:
-        return 0, "Text <10 chars"
-    spacy_doc = spacy_nlp(article.text)
-    keywords, entity_marks = [], []
-    for e in spacy_doc.ents:
-        if e.label_ not in set(['DATE', 'PERCENT', 'CARDINAL', 'MONEY', 'TIME', 'ORDINAL']):
-            if e.text not in keywords:
-                keywords.append(e.text)
-            entity_marks.append((e.start_char, e.end_char))
-    md_content = article.text
+    # Tag content
     # for entity_mark in reversed(entity_marks):
     #     md_content = md_content[:entity_mark[0]] + "[[" + md_content[entity_mark[0]:entity_mark[1]] + "]]" + md_content[entity_mark[1]:]
-    md_content = re.sub(r'\n\n\n+', '\n\n\n', md_content)
-    # keywords = article.keywords
     # if keywords and len(keywords):
     #     keyword_select = "|".join([re.escape(str(k).lower()) for k in keywords])
     #     md_content = re.sub(r'\b(' + keyword_select + r')\b', r'[[\1]]', md_content, flags=re.IGNORECASE)
@@ -146,27 +160,21 @@ def process_url(candidate, html_path, md_path, process_log):
     # Create metadata markdown
     md_metadata = "- URL: " + url + "\n"
     if title:
-        md_metadata += "- Title: " + title + "\n"
+        md_metadata += "- Article Title: " + title + "\n"
     if candidate.get('title') and candidate.get('title') != title:
         md_metadata += "- Bookmark Title: " + candidate.get('title') + "\n"
-    if article.authors and len(article.authors):
-        md_metadata += "- Authors: " + ", ".join([author for author in article.authors]) + "\n"
-    if article.publish_date:
-        md_metadata += "- Publish Date: " + article.publish_date.strftime("%m/%d/%Y") + "\n"
+    if newspaper_article.authors and len(newspaper_article.authors):
+        md_metadata += "- Authors: " + ", ".join(newspaper_article.authors) + "\n"
+    if newspaper_article.publish_date:
+        md_metadata += "- Publish Date: " + newspaper_article.publish_date.strftime("%m/%d/%Y") + "\n"
     if candidate.get('bdate'):
         md_metadata += "- Bookmarked Date: " + datetime.datetime.fromtimestamp(int(candidate.get('bdate'))).strftime("%m/%d/%Y") + "\n"
     if keywords:
-        md_metadata += "- Tags: " + ", ".join(["#" + re.sub(r'\s+', '-', k) for k in keywords]) + "\n"
-    
-    # Create summary markdown
-    md_summary = article.summary
+        md_metadata += "- Tags: " + ", ".join(keywords) + "\n"
 
     # Final markdown
     md = "**Metadata**\n" + md_metadata + "\n"
-    # if md_summary:
-    #     md += "**Summary**\n" + md_summary + "\n\n"
-    if md_content:
-        md += "**Content**\n" + md_content + "\n\n"
+    md += "-----------------------------\n" + md_content + "\n\n"
 
     # Chosen file
     md_filepath = md_path
