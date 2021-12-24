@@ -6,11 +6,11 @@
 # - Other (URL metadata? images?)
 
 ## Sample commands
-# python main.py --mode 'adhoc_crawl' --directory "/Users/Govind/Desktop/DB/" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
-# python main.py --mode 'adhoc_process' --directory "/Users/Govind/Desktop/DB/" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
-# python main.py --mode 'crawl_job' --directory "/Users/Govind/Desktop/DB/"
-# python main.py --mode 'process_job' --directory "/Users/Govind/Desktop/DB/"
-# 
+# python main.py --workflow 'adhoc_crawl' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
+# python main.py --workflow 'adhoc_process' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
+# python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/"
+# python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/"
+
 import argparse
 import requests
 import hashlib
@@ -32,8 +32,9 @@ import datetime
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
-parser.add_argument('--mode', help='Mode to run the program in', type=str, required=True, choices=['adhoc_crawl', 'adhoc_process', 'crawl_job', 'process_job'])
+parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['adhoc_crawl', 'adhoc_process', 'crawl_job', 'process_job'])
 parser.add_argument('--directory', help='Working directory', type=str, required=True)
+parser.add_argument('--mode', help='Mode to apply', type=str, default='prod', choices=['dev', 'prod'])
 parser.add_argument('--adhoc_url', help='Adhoc URL to act on', type=str)
 parser.add_argument('--crawl_override', dest='crawl_override', action='store_true')
 parser.add_argument('--no-crawl_override', dest='crawl_override', action='store_false')
@@ -51,23 +52,29 @@ def crawl_store_url(url, html_path, crawl_log, crawl_override):
     url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
     url_path = os.path.join(html_path, url_hash + ".html")
 
-    # Override check
+    # Pre-existing crawl check
     if crawl_override is False and os.path.exists(url_path):
-        return 0, "HTML pre-exists"
+        try:
+            previous_crawl = json.loads(crawl_log.Get(url_hash.encode(encoding='UTF-8')).decode())
+            if previous_crawl['s'] == 200:
+                return 0, "HTML pre-exists"
+        except Exception as e:
+            pass
 
-    # Crawl
+    # Crawl and log
     response = requests.get(url, timeout=10)
-    with open(url_path, "wb") as f:
-        f.write(response.content)
-
-    # Log
+    if response.status_code == 200:
+        with open(url_path, "wb") as f:
+            f.write(response.content)
+    # else:
+    #     if os.path.exists(url_path):
+    #         os.remove(url_path)
     crawl_log.Put(url_hash.encode(encoding='UTF-8'), json.dumps({"s" : response.status_code, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
     # crawl_log.Get(url_hash.encode(encoding='UTF-8')).decode()
 
-    # Check status
+    # Status & response
     if response.status_code != 200:
         return 0, "HTTP status {}".format(response.status_code)
-
     return 1, "Crawled!"
 
 # Parse to markdown from HTML
@@ -99,9 +106,9 @@ def process_url(candidate, html_path, md_path, process_log):
     md_content = ''
     if article.text:
         md_content += article.text
-        if article.keywords and len(article.keywords):
-            keyword_select = "|".join([re.escape(str(k).lower()) for k in article.keywords])
-            md_content = re.sub(r'\b(' + keyword_select + r')\b', r'[[\1]]', md_content, flags=re.IGNORECASE)
+        # if article.keywords and len(article.keywords):
+        #     keyword_select = "|".join([re.escape(str(k).lower()) for k in article.keywords])
+        #     md_content = re.sub(r'\b(' + keyword_select + r')\b', r'[[\1]]', md_content, flags=re.IGNORECASE)
 
     # Create metadata markdown
     md_metadata = "- URL: " + url + "\n"
@@ -123,10 +130,10 @@ def process_url(candidate, html_path, md_path, process_log):
 
     # Final markdown
     md = "**Metadata**\n" + md_metadata + "\n"
-    if md_summary:
-        md += "**Summary**\n" + md_summary + "\n"
+    # if md_summary:
+    #     md += "**Summary**\n" + md_summary + "\n\n"
     if md_content:
-        md += "**Content**\n" + md_content + "\n"
+        md += "**Content**\n" + md_content + "\n\n"
 
     # Chosen file
     md_filepath = md_path
@@ -200,7 +207,7 @@ def run_crawl_job(candidates, html_path, crawl_log, crawl_override):
 
         # Crawl
         try:
-            status, response = crawl_store_url(candidate['url'], os.path.join(args.directory, "prod", "html"), crawl_log, crawl_override)
+            status, response = crawl_store_url(candidate['url'], html_path, crawl_log, crawl_override)
         except Exception as e:
             response = str(e)[0:50]
 
@@ -235,27 +242,29 @@ def run_process_job(candidates, html_path, md_path, process_log):
 # Main file
 if __name__ == "__main__":
     
+    print("Workflow:", args.workflow)
     print("Mode:", args.mode)
     status, response = 0, "Nothing happened"
     if not os.path.exists(args.directory):
         status, response = 0, "Directory does not exist"
-    crawl_log = leveldb.LevelDB(os.path.join(args.directory, "log", 'crawl_log.db'), create_if_missing=True)
-    process_log = leveldb.LevelDB(os.path.join(args.directory, "log", 'process_log.db'), create_if_missing=True)
+    working_directory = os.path.join(args.directory, args.mode)
+    crawl_log = leveldb.LevelDB(os.path.join(working_directory, "log", 'crawl_log.db'), create_if_missing=True)
+    process_log = leveldb.LevelDB(os.path.join(working_directory, "log", 'process_log.db'), create_if_missing=True)
 
     try:
 
-        if args.mode == 'adhoc_crawl':
-            status, response = crawl_store_url(args.adhoc_url, os.path.join(args.directory, "prod", "html"), crawl_log, args.crawl_override)
+        if args.workflow == 'adhoc_crawl':
+            status, response = crawl_store_url(args.adhoc_url, os.path.join(working_directory, "html"), crawl_log, args.crawl_override)
 
-        elif args.mode == 'adhoc_process':
-            status, response = process_url({"url" : args.adhoc_url}, os.path.join(args.directory, "prod", "html"), os.path.join(args.directory, "prod", "md"), process_log)
+        elif args.workflow == 'adhoc_process':
+            status, response = process_url({"url" : args.adhoc_url}, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), process_log)
 
-        elif args.mode == 'crawl_job':
-            candidates = get_seed_candidates(os.path.join(args.directory, "input"))
-            status, response = run_crawl_job(candidates, os.path.join(args.directory, "prod", "html"), crawl_log, args.crawl_override)
-        elif args.mode == 'process_job':
-            candidates = get_seed_candidates(os.path.join(args.directory, "input"))
-            status, response = run_process_job(candidates, os.path.join(args.directory, "prod", "html"), os.path.join(args.directory, "prod", "md"), process_log)
+        elif args.workflow == 'crawl_job':
+            candidates = get_seed_candidates(os.path.join(working_directory, "input"))
+            status, response = run_crawl_job(candidates, os.path.join(working_directory, "html"), crawl_log, args.crawl_override)
+        elif args.workflow == 'process_job':
+            candidates = get_seed_candidates(os.path.join(working_directory, "input"))
+            status, response = run_process_job(candidates, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), process_log)
 
     except Exception as e:
         status, response = 0, str(e)

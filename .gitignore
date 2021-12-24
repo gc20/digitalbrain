@@ -1,6 +1,5 @@
 .DS_Store
 prod/
-staging/
-log/
-input/
+dev/
+.obsidian/
 *.db
