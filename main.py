@@ -1,9 +1,24 @@
-## Think
-# - Check quality at scale (crawl + process)
-# - Recos (tf-idf, better keyword n-grams, which keywords to tag?)
-# - Browsing history (threading across time, domain filtering, parsing view history)
-# - Chrome extension?
-# - Other (URL metadata? images?)
+## PLAN
+# 1] Readability
+#   - Safari-like linking?
+#   - Render as iframe using plug-in?
+#   - Link to images/pdf/mp4?
+# 2] Linking
+#   - Semantic similarity between notes
+#   - Semantic similarity between paragraphs
+#   - Chronological linking between pages
+# 3] Keywords
+#   - Yake
+#   - Cross-document
+#   - Deep tagging turn-on
+# 4] More Data
+#   - Chrome history (parse)
+#   - Kindle highlights
+#   - Twitter history (by hashtag?, pull related actions)
+# 5] Chrome Extension
+#   - Show recommendations while browsing ("link to my vault" -> similarity + keywords)
+# 6] Later
+#   - Misc (images/PDF, language, summarization, failures, domain removal)
 
 ## Sample commands
 # python main.py --workflow 'adhoc_crawl' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
@@ -20,7 +35,6 @@ import leveldb # consider plyvel
 import time
 import json
 import newspaper # https://github.com/codelucas/newspaper
-import nltk
 import re
 import pathlib
 import bookmarks_parser
@@ -28,7 +42,15 @@ import tqdm
 import random
 import tldextract
 import datetime
+# import nltk
+import spacy
+# import yake
+
+# NLP
 # nltk.download('punkt')
+# python -m spacy download en_core_web_sm
+spacy_nlp = spacy.load("en_core_web_lg")
+# yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=20, features=None)
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
@@ -85,7 +107,7 @@ def process_url(candidate, html_path, md_path, process_log):
     url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
     url_path = os.path.join(html_path, url_hash + ".html")
     if not os.path.exists(url_path): # swap with DB check?
-        0, "HTML doesn't exist"
+        return 0, "HTML doesn't exist"
     html = None
     with open(url_path, "rb") as f:
         html = f.read()
@@ -94,7 +116,7 @@ def process_url(candidate, html_path, md_path, process_log):
     article = newspaper.Article('')
     article.set_html(html)
     article.parse()
-    article.nlp()
+    # article.nlp()
 
     # Title
     title = article.title or '<Untitled>'
@@ -102,28 +124,39 @@ def process_url(candidate, html_path, md_path, process_log):
     title = re.sub(r'\s+', ' ', title)
     title = title.strip()
 
-    # Create content markdown
-    md_content = ''
-    if article.text:
-        md_content += article.text
-        # if article.keywords and len(article.keywords):
-        #     keyword_select = "|".join([re.escape(str(k).lower()) for k in article.keywords])
-        #     md_content = re.sub(r'\b(' + keyword_select + r')\b', r'[[\1]]', md_content, flags=re.IGNORECASE)
+    # Content & keywords
+    if len(article.text) < 10:
+        return 0, "Text <10 chars"
+    spacy_doc = spacy_nlp(article.text)
+    keywords, entity_marks = [], []
+    for e in spacy_doc.ents:
+        if e.label_ not in set(['DATE', 'PERCENT', 'CARDINAL', 'MONEY', 'TIME', 'ORDINAL']):
+            if e.text not in keywords:
+                keywords.append(e.text)
+            entity_marks.append((e.start_char, e.end_char))
+    md_content = article.text
+    # for entity_mark in reversed(entity_marks):
+    #     md_content = md_content[:entity_mark[0]] + "[[" + md_content[entity_mark[0]:entity_mark[1]] + "]]" + md_content[entity_mark[1]:]
+    md_content = re.sub(r'\n\n\n+', '\n\n\n', md_content)
+    # keywords = article.keywords
+    # if keywords and len(keywords):
+    #     keyword_select = "|".join([re.escape(str(k).lower()) for k in keywords])
+    #     md_content = re.sub(r'\b(' + keyword_select + r')\b', r'[[\1]]', md_content, flags=re.IGNORECASE)
 
     # Create metadata markdown
     md_metadata = "- URL: " + url + "\n"
     if title:
-        md_metadata += "- Article Title: " + title + "\n"
-    if candidate.get('title'):
+        md_metadata += "- Title: " + title + "\n"
+    if candidate.get('title') and candidate.get('title') != title:
         md_metadata += "- Bookmark Title: " + candidate.get('title') + "\n"
     if article.authors and len(article.authors):
-        md_metadata += "- Authors: " + ", ".join(article.authors) + "\n"
+        md_metadata += "- Authors: " + ", ".join([author for author in article.authors]) + "\n"
     if article.publish_date:
         md_metadata += "- Publish Date: " + article.publish_date.strftime("%m/%d/%Y") + "\n"
     if candidate.get('bdate'):
-        md_metadata += "- Bookmarked Date: " + datetime.datetime.fromtimestamp(int(candidate.get('bdate'))).strftime("%m/%d/%Y")
-    if article.keywords:
-        md_metadata += "- Keywords: " + ", ".join(["[[" + k + "]]" for k in article.keywords]) + "\n"
+        md_metadata += "- Bookmarked Date: " + datetime.datetime.fromtimestamp(int(candidate.get('bdate'))).strftime("%m/%d/%Y") + "\n"
+    if keywords:
+        md_metadata += "- Tags: " + ", ".join(["#" + re.sub(r'\s+', '-', k) for k in keywords]) + "\n"
     
     # Create summary markdown
     md_summary = article.summary
@@ -170,7 +203,8 @@ def __parse_chrome_bookmarks(candidates, bookmarks, path):
         for child in bookmarks.get('children', []):
             __parse_chrome_bookmarks(candidates, child, path)
     if bookmarks['type'] == 'bookmark':
-        candidates.append({"url" : bookmarks['url'], "path" : path, "title" : bookmarks["title"], "bdate" : bookmarks["add_date"]})
+        if not re.search(r'\.(pdf|jpeg|jpg|png)$', bookmarks['url'], flags=re.IGNORECASE) and not re.search(r'(google\.com\/search|docs\.google\.com\/spreadsheets)', bookmarks['url']):
+            candidates.append({"url" : bookmarks['url'], "path" : path, "title" : bookmarks["title"], "bdate" : bookmarks["add_date"]})
 
 # Get seed candidates
 def get_seed_candidates(input_path):
