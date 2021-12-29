@@ -1,20 +1,24 @@
 ## PLAN
-# 1] Linking
+# 1] Summarization
+#   - Summarize (abstract + executive?)
+#   - Deep tagging turn-on, only across summary?
+#   - GPT-3 API?
+# 2] Keywords
+#   - Split by keyword group (cycles?)
+#   - Cross-document (only keep top?)
+#   - Dedup tags (within doc maps?)
+#   - Precision/recall (Yake?)
+# 3] Linking
 #   - Semantic similarity between notes
 #   - Semantic similarity between paragraphs
 #   - Chronological linking between pages
-# 2] Keywords
-#   - Quality check
-#   - Yake
-#   - Cross-document
-#   - Deep tagging turn-on
-# 3] More Data
+# 4] More Data
 #   - Chrome history (parse)
 #   - Kindle highlights
 #   - Twitter history (by hashtag?, pull related actions)
-# 4] Chrome Extension
+# 5] Chrome Extension
 #   - Show recommendations while browsing ("link to my vault" -> similarity + keywords)
-# 5] Later
+# 6] Later
 #   - Misc (images/PDF, language, summarization, failures, domain removal)
 
 ## Sample commands
@@ -43,6 +47,7 @@ import spacy
 import readability
 import newspaper # https://github.com/codelucas/newspaper
 import bs4
+import urllib
 import markdownify
 # import nltk
 # import yake
@@ -113,13 +118,29 @@ def process_url(candidate, html_path, md_path, process_log):
     with open(url_path, "rb") as f:
         html = f.read()
 
-    # Get HTML & markdown
+    # Populate relative links
+    soup = bs4.BeautifulSoup(html, features="lxml")
+    for a in soup.findAll('a'):
+        if a.get('href'):
+            a['href'] = urllib.parse.urljoin(url, a['href'])
+    for img_tag in ['img', 'image']:
+        for i in soup.findAll(img_tag):
+            if i.get('src'):
+                i['src'] = urllib.parse.urljoin(url, i['src'])
+    html = str(soup)
+
+    # Get HTML
     readability_article = readability.Document(html)
     title = readability_article.title()
     html_content = readability_article.summary()
+
+    # Get markdown
     md_content = markdownify.markdownify(html_content)
     if not title or not html_content or not md_content:
         return 0, "Could not extract meaningful content"
+    md_content = re.sub(r'[\#]+', ' ', md_content)
+    md_content = re.sub(r'[\[]+', r'[', md_content)
+    md_content = re.sub(r'[\]]+', r']', md_content)
 
     # Get text
     newspaper_article = newspaper.Article('')
@@ -128,8 +149,8 @@ def process_url(candidate, html_path, md_path, process_log):
     text_content = newspaper_article.text
     # soup = bs4.BeautifulSoup(html_content, features="lxml")
     # text_content = soup.get_text('\n')
-    if len(text_content) < 10:
-        return 0, "Text <10 chars"
+    if len(text_content) < 280:
+        return 0, "Text <280 chars"
 
     # Get keywords
     spacy_doc = spacy_nlp(text_content)
@@ -173,7 +194,7 @@ def process_url(candidate, html_path, md_path, process_log):
         md_metadata += "- Tags: " + ", ".join(keywords) + "\n"
 
     # Final markdown
-    md = "**Metadata**\n" + md_metadata + "\n"
+    md = "**About**\n" + md_metadata + "\n"
     md += "-----------------------------\n" + md_content + "\n\n"
 
     # Chosen file
