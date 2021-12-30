@@ -50,13 +50,13 @@ import bs4
 import urllib
 import markdownify
 # import nltk
-# import yake
+import yake
 
 # NLP
 # python -m spacy download en_core_web_sm
 spacy_nlp = spacy.load("en_core_web_lg")
 # nltk.download('punkt')
-# yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=20, features=None)
+yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=None)
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
@@ -70,7 +70,7 @@ parser.set_defaults(crawl_override=False)
 args = parser.parse_args()
 
 # Crawl and store webpage
-def crawl_store_url(url, html_path, crawl_log, crawl_override):
+def crawl_store_url(url, html_path, logs, crawl_override):
 
     # Basic checks
     if url is None or type(url) is not str or not validators.url(url):
@@ -83,7 +83,7 @@ def crawl_store_url(url, html_path, crawl_log, crawl_override):
     # Pre-existing crawl check
     if crawl_override is False and os.path.exists(url_path):
         try:
-            previous_crawl = json.loads(crawl_log.Get(url_hash.encode(encoding='UTF-8')).decode())
+            previous_crawl = json.loads(logs["crawl"].Get(url_hash.encode(encoding='UTF-8')).decode())
             if previous_crawl['s'] == 200:
                 return 0, "HTML pre-exists"
         except Exception as e:
@@ -97,16 +97,24 @@ def crawl_store_url(url, html_path, crawl_log, crawl_override):
     # else:
     #     if os.path.exists(url_path):
     #         os.remove(url_path)
-    crawl_log.Put(url_hash.encode(encoding='UTF-8'), json.dumps({"s" : response.status_code, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
-    # crawl_log.Get(url_hash.encode(encoding='UTF-8')).decode()
+    logs["crawl"].Put(url_hash.encode(encoding='UTF-8'), json.dumps({"s" : response.status_code, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
+    # logs["crawl"].Get(url_hash.encode(encoding='UTF-8')).decode()
 
     # Status & response
     if response.status_code != 200:
         return 0, "HTTP status {}".format(response.status_code)
     return 1, "Crawled!"
 
+# Process keywords
+def __process_keyword(keyword):
+    keyword = re.sub(r'[\s\,\&\\\/\[\]\(\)\.\+\'\"\’]', '-', keyword)
+    keyword = re.sub(r'[\-]+', '-', keyword)
+    keyword = "#" + keyword.strip("-")
+    status = True if len(keyword) >= 3 else False
+    return keyword, status
+
 # Parse to markdown from HTML
-def process_url(candidate, html_path, md_path, process_log):
+def process_url(candidate, html_path, md_path, logs):
 
     # Get HTML
     url = candidate['url']
@@ -152,19 +160,28 @@ def process_url(candidate, html_path, md_path, process_log):
     if len(text_content) < 280:
         return 0, "Text <280 chars"
 
-    # Get keywords
+    # Get keywords (spacy)
     spacy_doc = spacy_nlp(text_content)
-    keywords_raw, entity_marks = collections.defaultdict(int), []
+    spacy_keywords_raw = collections.defaultdict(int)
+    # entity_marks = []
     for e in spacy_doc.ents:
         if e.label_ not in set(['DATE', 'PERCENT', 'CARDINAL', 'MONEY', 'TIME', 'ORDINAL']):
             if not re.search(r'\s\s', e.text):
-                keyword = re.sub(r'[\s\,\&\\\/\[\]\(\)\.\+\'\"\’]', '-', e.text)
-                keyword = re.sub(r'[\-]+', '-', keyword)
-                keyword = "#" + keyword.strip("-")
-                if len(keyword) >= 3:
-                    keywords_raw[keyword] += 1
-                    entity_marks.append((e.start_char, e.end_char))
-    keywords = [keyword for keyword, _ in sorted(keywords_raw.items(), key=lambda x: x[1], reverse=True)]
+                keyword, keyword_status = __process_keyword(e.text)
+                if keyword_status:
+                    spacy_keywords_raw[keyword] += 1
+                    # entity_marks.append((e.start_char, e.end_char))
+    # spacy_keywords = [keyword for keyword, _ in sorted(spacy_keywords_raw.items(), key=lambda x: x[1], reverse=True)]
+
+    # Get keywords (yake)
+    yake_keywords_result = yake_nlp.extract_keywords(text_content)
+    yake_keywords_raw = {}
+    for entry in yake_keywords_result:
+        if entry[1] < 0.2:
+            keyword, keyword_status = __process_keyword(entry[0])
+            if keyword_status:
+                yake_keywords_raw[keyword] = entry[1]
+    # yake_keywords = [keyword for keyword, keyword_score in sorted(yake_keywords_raw.items(), key=lambda x: x[1], reverse=True) if keyword_score < 0.2]
 
     # Title
     title = re.sub(r'[\\\/\:]', ' ', title)
@@ -190,8 +207,6 @@ def process_url(candidate, html_path, md_path, process_log):
         md_metadata += "- Publish Date: " + newspaper_article.publish_date.strftime("%m/%d/%Y") + "\n"
     if candidate.get('bdate'):
         md_metadata += "- Bookmarked Date: " + datetime.datetime.fromtimestamp(int(candidate.get('bdate'))).strftime("%m/%d/%Y") + "\n"
-    if keywords:
-        md_metadata += "- Tags: " + ", ".join(keywords) + "\n"
 
     # Final markdown
     md = "**About**\n" + md_metadata + "\n"
@@ -208,10 +223,10 @@ def process_url(candidate, html_path, md_path, process_log):
     # Remove old file, write new file and store in process log
     url_hash_encoded = url_hash.encode(encoding='UTF-8')
     try:
-        old_filename = json.loads(process_log.Get(url_hash_encoded).decode())['f']
+        old_filename = json.loads(logs["process"].Get(url_hash_encoded).decode())['f']
         if os.path.exists(old_filename):
             os.remove(old_filename)
-            process_log.Delete(url_hash_encoded)
+            logs["process"].Delete(url_hash_encoded)
             print("Removed:", old_filename)
     except Exception as e:
         print(str(e))
@@ -220,7 +235,12 @@ def process_url(candidate, html_path, md_path, process_log):
     # Write and store new file
     with open(md_filename, 'w') as f:
         print(md, file=f)
-    process_log.Put(url_hash_encoded, json.dumps({"f" : md_filename, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
+    logs["process"].Put(url_hash_encoded, json.dumps({"f" : md_filename, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
+
+    # Store tags
+    keywords = {"s" : spacy_keywords_raw, "y" : yake_keywords_raw}
+    logs["tags"].Put(url_hash_encoded, json.dumps(keywords).encode(encoding='UTF-8'))
+    print(json.dumps(keywords), file=logs["tags_stream"])
 
     return 1, ".md was created"
 
@@ -249,7 +269,7 @@ def get_seed_candidates(input_path):
     return candidates
 
 # Run crawl job
-def run_crawl_job(candidates, html_path, crawl_log, crawl_override):
+def run_crawl_job(candidates, html_path, logs, crawl_override):
     crawl_stats = {"total" : 0, "status" : {1: 0, 0: 0}, "response" : {}}
     domain_stats = {}
     for candidate in tqdm.tqdm(candidates):
@@ -270,7 +290,7 @@ def run_crawl_job(candidates, html_path, crawl_log, crawl_override):
 
         # Crawl
         try:
-            status, response = crawl_store_url(candidate['url'], html_path, crawl_log, crawl_override)
+            status, response = crawl_store_url(candidate['url'], html_path, logs, crawl_override)
         except Exception as e:
             response = str(e)[0:50]
 
@@ -286,13 +306,13 @@ def run_crawl_job(candidates, html_path, crawl_log, crawl_override):
 
 
 # Run process job
-def run_process_job(candidates, html_path, md_path, process_log):
+def run_process_job(candidates, html_path, md_path, logs):
     process_stats = {"total" : 0, "status" : {1: 0, 0: 0}, "response" : {}}
     for candidate in tqdm.tqdm(candidates):
         status, response = 0, ""
         try:
             process_stats['total'] += 1
-            status, response = process_url(candidate, html_path, md_path, process_log)
+            status, response = process_url(candidate, html_path, md_path, logs)
         except Exception as e:
             response = str(e)[0:50]
         process_stats['status'][status] += 1
@@ -311,23 +331,28 @@ if __name__ == "__main__":
     if not os.path.exists(args.directory):
         status, response = 0, "Directory does not exist"
     working_directory = os.path.join(args.directory, args.mode)
-    crawl_log = leveldb.LevelDB(os.path.join(working_directory, "log", 'crawl_log.db'), create_if_missing=True)
-    process_log = leveldb.LevelDB(os.path.join(working_directory, "log", 'process_log.db'), create_if_missing=True)
+
+    # Setup logs
+    crawl_status = leveldb.LevelDB(os.path.join(working_directory, "log", 'crawl_status.db'), create_if_missing=True)
+    process_status = leveldb.LevelDB(os.path.join(working_directory, "log", 'process_status.db'), create_if_missing=True)
+    tags_status = leveldb.LevelDB(os.path.join(working_directory, "log", 'tags_status.db'), create_if_missing=True)
+    tags_stream = open(os.path.join(working_directory, "log", 'tags_stream.json'), "w")
+    logs = {"crawl" : crawl_status, "process" : process_status, "tags" : tags_status, "tags_stream" : tags_stream}
 
     try:
 
         if args.workflow == 'adhoc_crawl':
-            status, response = crawl_store_url(args.adhoc_url, os.path.join(working_directory, "html"), crawl_log, args.crawl_override)
+            status, response = crawl_store_url(args.adhoc_url, os.path.join(working_directory, "html"), logs, args.crawl_override)
 
         elif args.workflow == 'adhoc_process':
-            status, response = process_url({"url" : args.adhoc_url}, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), process_log)
+            status, response = process_url({"url" : args.adhoc_url}, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), logs)
 
         elif args.workflow == 'crawl_job':
             candidates = get_seed_candidates(os.path.join(working_directory, "input"))
-            status, response = run_crawl_job(candidates, os.path.join(working_directory, "html"), crawl_log, args.crawl_override)
+            status, response = run_crawl_job(candidates, os.path.join(working_directory, "html"), logs, args.crawl_override)
         elif args.workflow == 'process_job':
             candidates = get_seed_candidates(os.path.join(working_directory, "input"))
-            status, response = run_process_job(candidates, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), process_log)
+            status, response = run_process_job(candidates, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), logs)
 
     except Exception as e:
         status, response = 0, str(e)
