@@ -1,31 +1,11 @@
-## PLAN
-# 1] Summarization
-#   - Summarize (abstract + executive?)
-#   - Deep tagging turn-on, only across summary?
-#   - GPT-3 API?
-# 2] Keywords
-#   - Split by keyword group (cycles?)
-#   - Cross-document (only keep top?)
-#   - Dedup tags (within doc maps?)
-#   - Precision/recall (Yake?)
-# 3] Linking
-#   - Semantic similarity between notes
-#   - Semantic similarity between paragraphs
-#   - Chronological linking between pages
-# 4] More Data
-#   - Chrome history (parse)
-#   - Kindle highlights
-#   - Twitter history (by hashtag?, pull related actions)
-# 5] Chrome Extension
-#   - Show recommendations while browsing ("link to my vault" -> similarity + keywords)
-# 6] Later
-#   - Misc (images/PDF, language, summarization, failures, domain removal)
+## Tagging -> Recommendation -> Extension
 
 ## Sample commands
 # python main.py --workflow 'adhoc_crawl' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
 # python main.py --workflow 'adhoc_process' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
 # python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/"
+# python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/"
 
 import argparse
 import requests
@@ -60,7 +40,7 @@ yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=N
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
-parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['adhoc_crawl', 'adhoc_process', 'crawl_job', 'process_job'])
+parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['adhoc_crawl', 'adhoc_process', 'crawl_job', 'process_job', 'tag_job'])
 parser.add_argument('--directory', help='Working directory', type=str, required=True)
 parser.add_argument('--mode', help='Mode to apply', type=str, default='prod', choices=['dev', 'prod'])
 parser.add_argument('--adhoc_url', help='Adhoc URL to act on', type=str)
@@ -150,6 +130,11 @@ def process_url(candidate, html_path, md_path, logs):
     md_content = re.sub(r'[\[]+', r'[', md_content)
     md_content = re.sub(r'[\]]+', r']', md_content)
 
+    # Title
+    title = re.sub(r'[\\\/\:]', ' ', title)
+    title = re.sub(r'\s+', ' ', title)
+    title = title.strip()
+
     # Get text
     newspaper_article = newspaper.Article('')
     newspaper_article.set_html(html_content)
@@ -159,6 +144,10 @@ def process_url(candidate, html_path, md_path, logs):
     # text_content = soup.get_text('\n')
     if len(text_content) < 280:
         return 0, "Text <280 chars"
+
+    # Get keywords (links)
+    links_keywords_raw = collections.Counter(re.findall(r'\[(.*?)\]', md_content))
+    links_keywords_raw += collections.Counter(re.findall(r'\*\*(.*?)\*\*', md_content))
 
     # Get keywords (spacy)
     spacy_doc = spacy_nlp(text_content)
@@ -182,11 +171,6 @@ def process_url(candidate, html_path, md_path, logs):
             if keyword_status:
                 yake_keywords_raw[keyword] = entry[1]
     # yake_keywords = [keyword for keyword, keyword_score in sorted(yake_keywords_raw.items(), key=lambda x: x[1], reverse=True) if keyword_score < 0.2]
-
-    # Title
-    title = re.sub(r'[\\\/\:]', ' ', title)
-    title = re.sub(r'\s+', ' ', title)
-    title = title.strip()
 
     # Tag content
     # for entity_mark in reversed(entity_marks):
@@ -238,7 +222,7 @@ def process_url(candidate, html_path, md_path, logs):
     logs["process"].Put(url_hash_encoded, json.dumps({"f" : md_filename, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
 
     # Store tags
-    keywords = {"s" : spacy_keywords_raw, "y" : yake_keywords_raw}
+    keywords = {"s" : spacy_keywords_raw, "y" : yake_keywords_raw, "l" : links_keywords_raw}
     logs["tags"].Put(url_hash_encoded, json.dumps(keywords).encode(encoding='UTF-8'))
     print(json.dumps(keywords), file=logs["tags_stream"])
 
@@ -265,13 +249,14 @@ def get_seed_candidates(input_path):
                 bookmarks = bookmarks_parser.parse(seed_filepath)
                 __parse_chrome_bookmarks(candidates, bookmarks[0], "")
     print("Detected {} candidates".format(len(candidates)))
-    random.shuffle(candidates)
     return candidates
 
 # Run crawl job
 def run_crawl_job(candidates, html_path, logs, crawl_override):
+
     crawl_stats = {"total" : 0, "status" : {1: 0, 0: 0}, "response" : {}}
     domain_stats = {}
+    random.shuffle(candidates)
     for candidate in tqdm.tqdm(candidates):
 
         # Stats 1
@@ -321,6 +306,70 @@ def run_process_job(candidates, html_path, md_path, logs):
             print(process_stats)
     return 1, json.dumps(process_stats)
 
+# Run tag job
+def run_tag_job(candidates, html_path, md_path, logs):
+
+    # Get top tags
+    tags_all = collections.defaultdict(int)
+    for candidate in tqdm.tqdm(candidates):
+        try:
+            url_hash = hashlib.md5(candidate['url'].encode('utf-8')).hexdigest()
+            tag_entry = json.loads(logs["tags"].Get(url_hash.encode(encoding='UTF-8')).decode())
+            tags_local = set()
+            for tag_type in ["s", "y"]:
+                for tag in tag_entry[tag_type]:
+                    tags_local.add(tag)
+            for tag in tags_local:
+                tags_all[tag] += 1
+        except Exception as e:
+            pass
+    tags_permitted = set()
+    for tag, _ in sorted(tags_all.items(), key=lambda x: x[1], reverse=True)[:100]:
+        tags_permitted.add(tag)
+    print(sorted(tags_permitted))
+    
+    # Tag candidates
+    tag_stats = {"total" : 0, "tagged" : 0, "status" : {1: 0, 0: 0}}
+    for candidate in tqdm.tqdm(candidates):
+        status = 0
+        try:
+
+            # Get chosen tags
+            tag_stats['total'] += 1
+            url_hash = hashlib.md5(candidate['url'].encode('utf-8')).hexdigest()
+            tag_entry = json.loads(logs["tags"].Get(url_hash.encode(encoding='UTF-8')).decode())
+            tags_chosen = set()
+            for tag_type in ["s", "y"]:
+                for tag in tag_entry[tag_type]:
+                    if tag in tags_permitted:
+                        tags_chosen.add(tag)
+
+            # Edit markdown
+            md_filename = json.loads(logs["process"].Get(url_hash.encode(encoding='UTF-8')).decode())["f"]
+            md = pathlib.Path(md_filename).read_text()
+            md_lines = md.split("\n")
+            # md_lines = [line for line in md_lines if not re.search(r'^Auto-tags:', line)]
+            while len(md_lines) and md_lines[-1] == "":
+                _ = md_lines.pop()
+            if re.search(r'^Auto-tags:', md_lines[-1]):
+                _ = md_lines.pop()
+            if len(tags_chosen):
+                md_lines.append("")
+                md_lines.append("Auto-tags: " + ", ".join(list(tags_chosen)))
+                tag_stats["tagged"] += 1
+            md_new = "\n".join(md_lines)
+            if md != md_new:
+                with open(md_filename, 'w') as f:
+                    print(md_new, file=f)
+            status = 1
+
+        except Exception as e:
+            pass
+        
+        tag_stats["status"][status] += 1
+
+    return 1, json.dumps(tag_stats)
+
 
 # Main file
 if __name__ == "__main__":
@@ -350,9 +399,14 @@ if __name__ == "__main__":
         elif args.workflow == 'crawl_job':
             candidates = get_seed_candidates(os.path.join(working_directory, "input"))
             status, response = run_crawl_job(candidates, os.path.join(working_directory, "html"), logs, args.crawl_override)
+
         elif args.workflow == 'process_job':
             candidates = get_seed_candidates(os.path.join(working_directory, "input"))
             status, response = run_process_job(candidates, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), logs)
+
+        elif args.workflow == 'tag_job':
+            candidates = get_seed_candidates(os.path.join(working_directory, "input"))
+            status, response = run_tag_job(candidates, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), logs)
 
     except Exception as e:
         status, response = 0, str(e)
