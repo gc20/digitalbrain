@@ -3,3 +3,4 @@ prod/
 dev/
 .obsidian/
 *.db
+__pycache__/

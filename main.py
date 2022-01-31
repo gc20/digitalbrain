@@ -1,5 +1,3 @@
-## Tagging -> Recommendation -> Extension
-
 ## Sample commands
 # python main.py --workflow 'adhoc_crawl' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
 # python main.py --workflow 'adhoc_process' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --adhoc_url "https://edition.cnn.com/2021/12/19/politics/joe-manchin-build-back-better/index.html"
@@ -7,6 +5,7 @@
 # python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/"
 
+from digital_brain import candidates as digital_brain_candidates
 import argparse
 import requests
 import hashlib
@@ -18,7 +17,6 @@ import json
 import collections
 import re
 import pathlib
-import bookmarks_parser
 import tqdm
 import random
 import tldextract
@@ -228,28 +226,6 @@ def process_url(candidate, html_path, md_path, logs):
 
     return 1, ".md was created"
 
-# [Internal] Parse chrome bookmarks
-def __parse_chrome_bookmarks(candidates, bookmarks, path):
-    if bookmarks['type'] == 'folder':
-        if bookmarks['title'] != 'Bookmarks Bar':
-            path += '{}/'.format(bookmarks['title'])
-        for child in bookmarks.get('children', []):
-            __parse_chrome_bookmarks(candidates, child, path)
-    if bookmarks['type'] == 'bookmark':
-        if not re.search(r'\.(pdf|jpeg|jpg|png)$', bookmarks['url'], flags=re.IGNORECASE) and not re.search(r'(google\.com\/search|docs\.google\.com\/spreadsheets)', bookmarks['url']):
-            candidates.append({"url" : bookmarks['url'], "path" : path, "title" : bookmarks["title"], "bdate" : bookmarks["add_date"]})
-
-# Get seed candidates
-def get_seed_candidates(input_path):
-    candidates = []
-    for seed_type in os.listdir(input_path):
-        for seed_filename in os.listdir(os.path.join(input_path, seed_type)):
-            seed_filepath = os.path.join(input_path, seed_type, seed_filename)
-            if seed_type == "chrome_bookmarks":
-                bookmarks = bookmarks_parser.parse(seed_filepath)
-                __parse_chrome_bookmarks(candidates, bookmarks[0], "")
-    print("Detected {} candidates".format(len(candidates)))
-    return candidates
 
 # Run crawl job
 def run_crawl_job(candidates, html_path, logs, crawl_override):
@@ -397,15 +373,15 @@ if __name__ == "__main__":
             status, response = process_url({"url" : args.adhoc_url}, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), logs)
 
         elif args.workflow == 'crawl_job':
-            candidates = get_seed_candidates(os.path.join(working_directory, "input"))
+            candidates = digital_brain_candidates.get_seed_candidates(os.path.join(working_directory, "input"))
             status, response = run_crawl_job(candidates, os.path.join(working_directory, "html"), logs, args.crawl_override)
 
         elif args.workflow == 'process_job':
-            candidates = get_seed_candidates(os.path.join(working_directory, "input"))
+            candidates = digital_brain_candidates.get_seed_candidates(os.path.join(working_directory, "input"))
             status, response = run_process_job(candidates, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), logs)
 
         elif args.workflow == 'tag_job':
-            candidates = get_seed_candidates(os.path.join(working_directory, "input"))
+            candidates = digital_brain_candidates.get_seed_candidates(os.path.join(working_directory, "input"))
             status, response = run_tag_job(candidates, os.path.join(working_directory, "html"), os.path.join(working_directory, "md"), logs)
 
     except Exception as e:
