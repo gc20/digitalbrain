@@ -3,32 +3,13 @@ import os
 import bs4
 import urllib
 import markdownify
-# import nltk
-import yake
-import spacy
 import readability
-import newspaper # https://github.com/codelucas/newspaper
 import re
 import tqdm
 import collections
 import json
 import pathlib
-import datetime
 import time
-
-# NLP
-# python -m spacy download en_core_web_lg
-spacy_nlp = spacy.load("en_core_web_lg")
-# nltk.download('punkt')
-yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=None)
-
-# Process keywords
-def __process_keyword(keyword):
-    keyword = re.sub(r'[\s\,\&\\\/\[\]\(\)\.\+\'\"\’]', '-', keyword)
-    keyword = re.sub(r'[\-]+', '-', keyword)
-    keyword = "#" + keyword.strip("-")
-    status = True if len(keyword) >= 3 else False
-    return keyword, status
 
 # Parse to markdown from HTML
 def process_url(candidate, html_path, md_path, logs):
@@ -59,6 +40,15 @@ def process_url(candidate, html_path, md_path, logs):
     title = readability_article.title()
     html_content = readability_article.summary()
 
+    # Prepare title
+    title = re.sub(r'[\\\/\:]', ' ', title)
+    title = re.sub(r'\s+', ' ', title)
+    title = title.strip()
+    if not title or len(title) < 5:
+        title = candidate.get('title')
+        if not title or len(title) < 5:
+            return 0, "Could not extract meaningful title"
+
     # Get markdown
     md_content = markdownify.markdownify(html_content)
     if not title or not html_content or not md_content:
@@ -66,72 +56,10 @@ def process_url(candidate, html_path, md_path, logs):
     md_content = re.sub(r'[\#]+', ' ', md_content)
     md_content = re.sub(r'[\[]+', r'[', md_content)
     md_content = re.sub(r'[\]]+', r']', md_content)
-
-    # Title
-    title = re.sub(r'[\\\/\:]', ' ', title)
-    title = re.sub(r'\s+', ' ', title)
-    title = title.strip()
-
-    # Get text
-    newspaper_article = newspaper.Article('')
-    newspaper_article.set_html(html_content)
-    newspaper_article.parse()
-    text_content = newspaper_article.text
-    # soup = bs4.BeautifulSoup(html_content, features="lxml")
-    # text_content = soup.get_text('\n')
-    if len(text_content) < 280:
+    if len(md_content) < 280:
         return 0, "Text <280 chars"
-
-    # Get keywords (links)
-    links_keywords_raw = collections.Counter(re.findall(r'\[(.*?)\]', md_content))
-    links_keywords_raw += collections.Counter(re.findall(r'\*\*(.*?)\*\*', md_content))
-
-    # Get keywords (spacy)
-    spacy_doc = spacy_nlp(text_content)
-    spacy_keywords_raw = collections.defaultdict(int)
-    # entity_marks = []
-    for e in spacy_doc.ents:
-        if e.label_ not in set(['DATE', 'PERCENT', 'CARDINAL', 'MONEY', 'TIME', 'ORDINAL']):
-            if not re.search(r'\s\s', e.text):
-                keyword, keyword_status = __process_keyword(e.text)
-                if keyword_status:
-                    spacy_keywords_raw[keyword] += 1
-                    # entity_marks.append((e.start_char, e.end_char))
-    # spacy_keywords = [keyword for keyword, _ in sorted(spacy_keywords_raw.items(), key=lambda x: x[1], reverse=True)]
-
-    # Get keywords (yake)
-    yake_keywords_result = yake_nlp.extract_keywords(text_content)
-    yake_keywords_raw = {}
-    for entry in yake_keywords_result:
-        if entry[1] < 0.2:
-            keyword, keyword_status = __process_keyword(entry[0])
-            if keyword_status:
-                yake_keywords_raw[keyword] = entry[1]
-    # yake_keywords = [keyword for keyword, keyword_score in sorted(yake_keywords_raw.items(), key=lambda x: x[1], reverse=True) if keyword_score < 0.2]
-
-    # Tag content
-    # for entity_mark in reversed(entity_marks):
-    #     md_content = md_content[:entity_mark[0]] + "[[" + md_content[entity_mark[0]:entity_mark[1]] + "]]" + md_content[entity_mark[1]:]
-    # if keywords and len(keywords):
-    #     keyword_select = "|".join([re.escape(str(k).lower()) for k in keywords])
-    #     md_content = re.sub(r'\b(' + keyword_select + r')\b', r'[[\1]]', md_content, flags=re.IGNORECASE)
-
-    # Create metadata markdown
-    md_metadata = "- URL: " + url + "\n"
-    if title:
-        md_metadata += "- Article Title: " + title + "\n"
-    if candidate.get('title') and candidate.get('title') != title:
-        md_metadata += "- Bookmark Title: " + candidate.get('title') + "\n"
-    if newspaper_article.authors and len(newspaper_article.authors):
-        md_metadata += "- Authors: " + ", ".join(newspaper_article.authors) + "\n"
-    if newspaper_article.publish_date:
-        md_metadata += "- Publish Date: " + newspaper_article.publish_date.strftime("%m/%d/%Y") + "\n"
-    if candidate.get('bdate'):
-        md_metadata += "- Bookmarked Date: " + datetime.datetime.fromtimestamp(int(candidate.get('bdate'))).strftime("%m/%d/%Y") + "\n"
-
-    # Final markdown
-    md = "**About**\n" + md_metadata + "\n"
-    md += "-----------------------------\n" + md_content + "\n\n"
+    md_content = re.sub(r'\n\n[\n]+', r'\n\n', md_content)
+    md_content = '[' + title + ']' + '(' + url + ')' + "\n\n" + md_content
 
     # Chosen file
     md_filepath = md_path
@@ -155,13 +83,8 @@ def process_url(candidate, html_path, md_path, logs):
 
     # Write and store new file
     with open(md_filename, 'w') as f:
-        print(md, file=f)
+        print(md_content, file=f)
     logs["process"].Put(url_hash_encoded, json.dumps({"f" : md_filename, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
-
-    # Store tags
-    keywords = {"s" : spacy_keywords_raw, "y" : yake_keywords_raw, "l" : links_keywords_raw}
-    logs["tags"].Put(url_hash_encoded, json.dumps(keywords).encode(encoding='UTF-8'))
-    print(json.dumps(keywords), file=logs["tags_stream"])
 
     return 1, ".md was created"
 

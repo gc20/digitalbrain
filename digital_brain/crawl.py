@@ -9,7 +9,7 @@ import tldextract
 import time
 
 # Crawl and store webpage
-def crawl_store_url(url, html_path, logs, crawl_override):
+def crawl_url(url, html_path, logs, crawl_override):
 
     # Basic checks
     if url is None or type(url) is not str or not validators.url(url):
@@ -70,7 +70,7 @@ def run_crawl_job(candidates, html_path, logs, crawl_override):
 
         # Crawl
         try:
-            status, response = crawl_store_url(candidate['url'], html_path, logs, crawl_override)
+            status, response = crawl_url(candidate['url'], html_path, logs, crawl_override)
         except Exception as e:
             response = str(e)[0:50]
 
@@ -80,6 +80,6 @@ def run_crawl_job(candidates, html_path, logs, crawl_override):
         crawl_stats['response'][response] = 1 if response not in crawl_stats['response'] else crawl_stats['response'][response]+1
         domain_stats[domain]['response'][response] = 1 if response not in domain_stats[domain]['response'] else domain_stats[domain]['response'][response]+1
     
-    crawl_stats['success_rate'] = "0%" if crawl_stats['total'] == 0 else "%.2f%" % (crawl_stats['stats'][1] / crawl_stats['total'])
+    crawl_stats['success_rate'] = "0%" if crawl_stats['total'] == 0 else "%.2f%" % (crawl_stats['status'][1] / crawl_stats['total'])
     print(domain_stats)
     return 1, json.dumps(crawl_stats)

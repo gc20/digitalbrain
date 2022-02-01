@@ -8,16 +8,17 @@ import json
 import tqdm
 import os
 import transformers
-
+import datetime
 
 def experimental_summarization(candidates, experimental_path, logs):
  
     entries = helper.get_candidate_entries(candidates, logs)
+    generated_at = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     model = transformers.BartForConditionalGeneration.from_pretrained("sshleifer/distilbart-cnn-12-6")
     tokenizer = transformers.BartTokenizer.from_pretrained("sshleifer/distilbart-cnn-12-6")
 
-    with open(os.path.join(experimental_path, "summarization.json"), "w") as f:
+    with open(os.path.join(experimental_path, "summarization.json"), "a") as f:
         max_chunk_size = 8
         for i in range(0, len(entries), max_chunk_size):
             print("Iteration {}".format(i), flush=True)
@@ -34,5 +35,6 @@ def experimental_summarization(candidates, experimental_path, logs):
             output = [tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)]
             for j, entry in enumerate(chunk):
                 entry['summary'] = output[0][j]
+                entry['generated_at'] = generated_at
                 print(json.dumps(entry), file=f, flush=True)
             # summary = tokenizer.decode(summary_ids[0])

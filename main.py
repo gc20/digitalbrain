@@ -1,6 +1,6 @@
 ## Sample commands
-# python main.py --workflow 'crawl_adhoc' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --url_adhoc "https://huggingface.co/tasks/question-answering"
-# python main.py --workflow 'process_adhoc' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --url_adhoc "https://huggingface.co/tasks/question-answering"
+# python main.py --workflow 'crawl_url_adhoc' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --url_adhoc "https://huggingface.co/tasks/question-answering"
+# python main.py --workflow 'process_url_adhoc' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --url_adhoc "https://huggingface.co/tasks/question-answering"
 # python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/"
@@ -18,7 +18,7 @@ from experimental.summarization import experimental_summarization
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
-parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['crawl_adhoc', 'process_adhoc', 'crawl_job', 'process_job', 'tag_job', 'experimental_similarity', 'experimental_summarization'])
+parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['crawl_url_adhoc', 'process_url_adhoc', 'crawl_job', 'process_job', 'tag_job', 'experimental_similarity', 'experimental_summarization'])
 parser.add_argument('--directory', help='Working directory', type=str, required=True)
 parser.add_argument('--mode', help='Mode to apply', type=str, default='prod', choices=['dev', 'prod'])
 parser.add_argument('--url_adhoc', help='Adhoc URL to act on', type=str)
@@ -45,15 +45,15 @@ if __name__ == "__main__":
     crawl_status = leveldb.LevelDB(os.path.join(working_directory, "log", 'crawl_status.db'), create_if_missing=True)
     process_status = leveldb.LevelDB(os.path.join(working_directory, "log", 'process_status.db'), create_if_missing=True)
     tags_status = leveldb.LevelDB(os.path.join(working_directory, "log", 'tags_status.db'), create_if_missing=True)
-    tags_stream = open(os.path.join(working_directory, "log", 'tags_stream.json'), "w")
+    tags_stream = open(os.path.join(working_directory, "log", 'tags_stream.json'), "a")
     logs = {"crawl" : crawl_status, "process" : process_status, "tags" : tags_status, "tags_stream" : tags_stream}
 
     try:
 
-        if args.workflow == 'crawl_adhoc':
-            status, response = db_crawl.crawl_store_url(args.url_adhoc, html_path, logs, args.crawl_override)
+        if args.workflow == 'crawl_url_adhoc':
+            status, response = db_crawl.crawl_url(args.url_adhoc, html_path, logs, args.crawl_override)
 
-        elif args.workflow == 'process_adhoc':
+        elif args.workflow == 'process_url_adhoc':
             status, response = db_process.process_url({"url" : args.url_adhoc}, html_path, md_path, logs)
 
         else:
@@ -67,7 +67,7 @@ if __name__ == "__main__":
                 status, response = db_process.run_process_job(candidates, html_path, md_path, logs)
 
             elif args.workflow == 'tag_job':
-                status, response = db_tag.run_tag_job(candidates, html_path, md_path, logs)
+                status, response = db_tag.run_tag_job(candidates, md_path, logs)
 
             elif args.workflow == 'experimental_similarity':
                 status, response = experimental_similarity(candidates, experimental_path, logs)

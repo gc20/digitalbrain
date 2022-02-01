@@ -4,67 +4,117 @@ import hashlib
 import json
 import pathlib
 import re
+import markdown
+import bs4
+import yake
+import spacy
+
+
+# NLP
+spacy_nlp = spacy.load("en_core_web_lg") # python -m spacy download en_core_web_lg
+# yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=None)
+
+# Process tags
+def __process_tag(tag):
+    tag = re.sub(r'[\s\,\&\\\/\[\]\(\)\.\+\'\"\’]', '-', tag)
+    tag = re.sub(r'[\-]+', '-', tag)
+    tag = "#" + tag.strip("-")
+    status = True if len(tag) >= 3 else False
+    return tag, status
+
+# Convert markdown to text
+def __markdown_to_text(md):
+    # md -> html -> text since BeautifulSoup can extract text cleanly
+    html = markdown.markdown(md)
+    # remove code snippets
+    html = re.sub(r'<pre>(.*?)</pre>', ' ', html)
+    html = re.sub(r'<code>(.*?)</code >', ' ', html)
+    # extract text
+    soup = bs4.BeautifulSoup(html, "html.parser")
+    text = ''.join(soup.findAll(text=True))
+    return text
+
+# Extract tags from markdown
+def tag_markdown(candidate, md_path, permitted_tags, logs):
+
+    # Get md
+    url = candidate['url']
+    url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
+    url_hash_encoded = url_hash.encode(encoding='UTF-8')
+    md_filename, md = None, None
+    try:
+        md_filename = json.loads(logs["process"].Get(url_hash_encoded).decode())["f"]
+        md = pathlib.Path(md_filename).read_text()
+    except Exception as e:
+        return 0, "Could not extract md"
+    if len(md) < 5:
+        return 0, "md not meaningful enough"
+
+    # Clean out existing tags
+    md_lines = md.strip("\n").split("\n")
+    # md_lines = [line for line in md_lines if not re.search(r'^Auto-tags:', line)]
+    if re.search(r'^Auto-tags:', md_lines[-1]):
+        _ = md_lines.pop()
+    md = "\n".join(md_lines)
+
+    # Get tags (spacy)
+    text_content = __markdown_to_text(md)
+    spacy_doc = spacy_nlp(text_content)
+    spacy_tags_raw = collections.defaultdict(int)
+    for e in spacy_doc.ents:
+        if e.label_ not in set(['DATE', 'PERCENT', 'CARDINAL', 'MONEY', 'TIME', 'ORDINAL']):
+            if not re.search(r'\s\s', e.text):
+                tag, tag_status = __process_tag(e.text)
+                if tag_status:
+                    spacy_tags_raw[tag] += 1
+    spacy_tags = [tag for tag, _ in sorted(spacy_tags_raw.items(), key=lambda x: x[1], reverse=True) if permitted_tags is None or tag in permitted_tags]
+
+    # # Get tags (yake)
+    # yake_tags_result = yake_nlp.extract_keywords(text_content)
+    # yake_tags_raw = {}
+    # for entry in yake_tags_result:
+    #     if entry[1] < 0.2:
+    #         tag, tag_status = __process_tag(entry[0])
+    #         if tag_status:
+    #             yake_tags_raw[tag] = entry[1]
+    # # yake_tags = [tag for tag, tag_score in sorted(yake_tags_raw.items(), key=lambda x: x[1], reverse=True) if tag_score < 0.2]
+
+    # # Get tags (links)
+    # links_tags_raw = collections.Counter(re.findall(r'\[(.*?)\]', md))
+    # links_tags_raw += collections.Counter(re.findall(r'\*\*(.*?)\*\*', md))
+
+    # Add tags
+    if len(spacy_tags):
+        if md_lines[-1] != "":
+            md_lines.append("")
+        md_lines.append("Auto-tags: " + ", ".join(list(spacy_tags)))
+    md_new = "\n".join(md_lines)
+    response = "Auto-tags are the same"
+    if md != md_new:
+        with open(md_filename, 'w') as f:
+            print(md_new, file=f)
+        response = "Auto-tags have changed"
+
+    # Log tags
+    tags_all = {"s" : spacy_tags_raw} #, "y" : yake_tags_raw, "l" : links_tags_raw}
+    logs["tags"].Put(url_hash_encoded, json.dumps(tags_all).encode(encoding='UTF-8'))
+    print(json.dumps(tags_all), file=logs["tags_stream"])
+
+    return 1, response
+
 
 # Run tag job
-def run_tag_job(candidates, html_path, md_path, logs):
-
-    # Get top tags
-    tags_all = collections.defaultdict(int)
+def run_tag_job(candidates, md_path, logs):
+    tag_stats = {"total" : 0, "status" : {1: 0, 0: 0}, "response" : {}}
     for candidate in tqdm.tqdm(candidates):
+        status, response = 0, ""
         try:
-            url_hash = hashlib.md5(candidate['url'].encode('utf-8')).hexdigest()
-            tag_entry = json.loads(logs["tags"].Get(url_hash.encode(encoding='UTF-8')).decode())
-            tags_local = set()
-            for tag_type in ["s", "y"]:
-                for tag in tag_entry[tag_type]:
-                    tags_local.add(tag)
-            for tag in tags_local:
-                tags_all[tag] += 1
-        except Exception as e:
-            pass
-    tags_permitted = set()
-    for tag, _ in sorted(tags_all.items(), key=lambda x: x[1], reverse=True)[:100]:
-        tags_permitted.add(tag)
-    print(sorted(tags_permitted))
-    
-    # Tag candidates
-    tag_stats = {"total" : 0, "tagged" : 0, "status" : {1: 0, 0: 0}}
-    for candidate in tqdm.tqdm(candidates):
-        status = 0
-        try:
-
-            # Get chosen tags
             tag_stats['total'] += 1
-            url_hash = hashlib.md5(candidate['url'].encode('utf-8')).hexdigest()
-            tag_entry = json.loads(logs["tags"].Get(url_hash.encode(encoding='UTF-8')).decode())
-            tags_chosen = set()
-            for tag_type in ["s", "y"]:
-                for tag in tag_entry[tag_type]:
-                    if tag in tags_permitted:
-                        tags_chosen.add(tag)
-
-            # Edit markdown
-            md_filename = json.loads(logs["process"].Get(url_hash.encode(encoding='UTF-8')).decode())["f"]
-            md = pathlib.Path(md_filename).read_text()
-            md_lines = md.split("\n")
-            md_lines = [line for line in md_lines if not re.search(r'^Auto-tags:', line)]
-            while len(md_lines) and md_lines[-1] == "":
-                _ = md_lines.pop()
-            if re.search(r'^Auto-tags:', md_lines[-1]):
-                _ = md_lines.pop()
-            if len(tags_chosen):
-                md_lines.append("")
-                md_lines.append("Auto-tags: " + ", ".join(list(tags_chosen)))
-                tag_stats["tagged"] += 1
-            md_new = "\n".join(md_lines)
-            if md != md_new:
-                with open(md_filename, 'w') as f:
-                    print(md_new, file=f)
-            status = 1
-
+            status, response = tag_markdown(candidate, md_path, None, logs)
         except Exception as e:
-            pass
-        
-        tag_stats["status"][status] += 1
-
+            response = str(e)[0:50]
+        tag_stats['status'][status] += 1
+        tag_stats['response'][response] = 1 if response not in tag_stats['response'] else tag_stats['response'][response]+1
+        if tag_stats['total'] % 100 == 0:
+            print(tag_stats)
     return 1, json.dumps(tag_stats)

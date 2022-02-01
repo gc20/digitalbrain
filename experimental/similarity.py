@@ -10,10 +10,12 @@ import os
 import spacy
 import faiss
 import numpy
+import datetime
 
 def experimental_similarity(candidates, experimental_path, logs):
  
     entries = helper.get_candidate_entries(candidates, logs)
+    generated_at = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     nlp = spacy.load("en_core_web_lg")
     embeddings = []
@@ -37,12 +39,13 @@ def experimental_similarity(candidates, experimental_path, logs):
     # print(index.ntotal, index.is_trained)
     # index.search(numpy.array([embeddings[0]]), k=3)
 
-    with open(os.path.join(experimental_path, "similarity.tsv"), "w") as f:
+    with open(os.path.join(experimental_path, "similarity.tsv"), "a") as f:
         for id in entry_lookup:
             D, I = index.search(numpy.array([embeddings[id]]), k=3)
             if len(I) == 0 or len(I[0]) == 0:
                 continue
             output = [
+                generated_at,
                 entry_lookup[id]['url'],
                 entry_lookup[id]['title']
             ]
