@@ -1,4 +1,3 @@
-import hashlib
 import os
 import bs4
 import urllib
@@ -12,27 +11,26 @@ import pathlib
 import time
 
 # Parse to markdown from HTML
-def process_url(candidate, html_path, md_path, logs):
+def process_html(candidate, html_path, md_path, logs):
 
     # Get HTML
-    url = candidate['url']
-    url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
-    url_path = os.path.join(html_path, url_hash + ".html")
-    if not os.path.exists(url_path): # swap with DB check?
+    html_filename = os.path.join(html_path, candidate['id'] + ".html")
+    if not os.path.exists(html_filename): # swap with DB check?
         return 0, "HTML doesn't exist"
     html = None
-    with open(url_path, "rb") as f:
+    with open(html_filename, "rb") as f:
         html = f.read()
 
     # Populate relative links
     soup = bs4.BeautifulSoup(html, features="lxml")
-    for a in soup.findAll('a'):
-        if a.get('href'):
-            a['href'] = urllib.parse.urljoin(url, a['href'])
-    for img_tag in ['img', 'image']:
-        for i in soup.findAll(img_tag):
-            if i.get('src'):
-                i['src'] = urllib.parse.urljoin(url, i['src'])
+    if candidate['type'] == 'url':
+        for a in soup.findAll('a'):
+            if a.get('href'):
+                a['href'] = urllib.parse.urljoin(candidate['type_id'], a['href'])
+        for img_tag in ['img', 'image']:
+            for i in soup.findAll(img_tag):
+                if i.get('src'):
+                    i['src'] = urllib.parse.urljoin(candidate['type_id'], i['src'])
     html = str(soup)
 
     # Get HTML
@@ -59,7 +57,10 @@ def process_url(candidate, html_path, md_path, logs):
     if len(md_content) < 280:
         return 0, "Text <280 chars"
     md_content = re.sub(r'\n\n[\n]+', r'\n\n', md_content)
-    md_content = '[' + title + ']' + '(' + url + ')' + "\n\n" + md_content
+    if candidate['type'] == "url":
+        md_content = '[' + title + ']' + '(' + candidate['type_id'] + ')' + "\n\n" + md_content
+    else:
+        md_content = title + "\n\n" + md_content
 
     # Chosen file
     md_filepath = md_path
@@ -70,12 +71,11 @@ def process_url(candidate, html_path, md_path, logs):
     md_filename = os.path.join(md_filepath, title + ".md")
 
     # Remove old file, write new file and store in process log
-    url_hash_encoded = url_hash.encode(encoding='UTF-8')
     try:
-        old_filename = json.loads(logs["process"].Get(url_hash_encoded).decode())['f']
+        old_filename = json.loads(logs["process"].Get(candidate['idb']).decode())['file']
         if os.path.exists(old_filename):
             os.remove(old_filename)
-            logs["process"].Delete(url_hash_encoded)
+            logs["process"].Delete(candidate['idb'])
             print("Removed:", old_filename)
     except Exception as e:
         print(str(e))
@@ -84,7 +84,10 @@ def process_url(candidate, html_path, md_path, logs):
     # Write and store new file
     with open(md_filename, 'w') as f:
         print(md_content, file=f)
-    logs["process"].Put(url_hash_encoded, json.dumps({"f" : md_filename, "u" : url, "t" : int(time.time())}).encode(encoding='UTF-8'))
+    log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
+    log_entry["file"] = md_filename
+    log_entry["time"] = int(time.time()) 
+    logs["process"].Put(candidate['idb'], json.dumps(log_entry).encode(encoding='UTF-8'))
 
     return 1, ".md was created"
 
@@ -96,7 +99,7 @@ def run_process_job(candidates, html_path, md_path, logs):
         status, response = 0, ""
         try:
             process_stats['total'] += 1
-            status, response = process_url(candidate, html_path, md_path, logs)
+            status, response = process_html(candidate, html_path, md_path, logs)
         except Exception as e:
             response = str(e)[0:50]
         process_stats['status'][status] += 1

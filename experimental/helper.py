@@ -28,7 +28,7 @@ def get_candidate_entries(candidates, logs):
         url_hash = hashlib.md5(candidate['url'].encode('utf-8')).hexdigest()
         filename = None
         try:
-            filename = json.loads(logs["process"].Get(url_hash.encode(encoding='UTF-8')).decode())["f"]
+            filename = json.loads(logs["process"].Get(url_hash.encode(encoding='UTF-8')).decode())["file"]
         except Exception as e:
             pass
         if not filename or not os.path.exists(filename):

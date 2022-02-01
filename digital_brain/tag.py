@@ -1,6 +1,5 @@
 import collections
 import tqdm
-import hashlib
 import json
 import pathlib
 import re
@@ -12,7 +11,7 @@ import spacy
 
 # NLP
 spacy_nlp = spacy.load("en_core_web_lg") # python -m spacy download en_core_web_lg
-# yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=None)
+yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=None)
 
 # Process tags
 def __process_tag(tag):
@@ -38,12 +37,9 @@ def __markdown_to_text(md):
 def tag_markdown(candidate, md_path, permitted_tags, logs):
 
     # Get md
-    url = candidate['url']
-    url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
-    url_hash_encoded = url_hash.encode(encoding='UTF-8')
     md_filename, md = None, None
     try:
-        md_filename = json.loads(logs["process"].Get(url_hash_encoded).decode())["f"]
+        md_filename = json.loads(logs["process"].Get(candidate['idb']).decode())["file"]
         md = pathlib.Path(md_filename).read_text()
     except Exception as e:
         return 0, "Could not extract md"
@@ -69,25 +65,26 @@ def tag_markdown(candidate, md_path, permitted_tags, logs):
                     spacy_tags_raw[tag] += 1
     spacy_tags = [tag for tag, _ in sorted(spacy_tags_raw.items(), key=lambda x: x[1], reverse=True) if permitted_tags is None or tag in permitted_tags]
 
-    # # Get tags (yake)
-    # yake_tags_result = yake_nlp.extract_keywords(text_content)
-    # yake_tags_raw = {}
-    # for entry in yake_tags_result:
-    #     if entry[1] < 0.2:
-    #         tag, tag_status = __process_tag(entry[0])
-    #         if tag_status:
-    #             yake_tags_raw[tag] = entry[1]
-    # # yake_tags = [tag for tag, tag_score in sorted(yake_tags_raw.items(), key=lambda x: x[1], reverse=True) if tag_score < 0.2]
+    # Get tags (yake)
+    yake_tags_result = yake_nlp.extract_keywords(text_content)
+    yake_tags_raw = {}
+    for entry in yake_tags_result:
+        if entry[1] < 0.2:
+            tag, tag_status = __process_tag(entry[0])
+            if tag_status:
+                yake_tags_raw[tag] = entry[1]
+    yake_tags = [tag for tag, tag_score in sorted(yake_tags_raw.items(), key=lambda x: x[1], reverse=True) if tag_score < 0.2 and tag not in spacy_tags_raw and (permitted_tags is None or tag in permitted_tags)]
 
     # # Get tags (links)
     # links_tags_raw = collections.Counter(re.findall(r'\[(.*?)\]', md))
     # links_tags_raw += collections.Counter(re.findall(r'\*\*(.*?)\*\*', md))
 
     # Add tags
-    if len(spacy_tags):
+    auto_tags = spacy_tags + yake_tags
+    if len(auto_tags):
         if md_lines[-1] != "":
             md_lines.append("")
-        md_lines.append("Auto-tags: " + ", ".join(list(spacy_tags)))
+        md_lines.append("Auto-tags: " + ", ".join(list(auto_tags)))
     md_new = "\n".join(md_lines)
     response = "Auto-tags are the same"
     if md != md_new:
@@ -96,9 +93,11 @@ def tag_markdown(candidate, md_path, permitted_tags, logs):
         response = "Auto-tags have changed"
 
     # Log tags
-    tags_all = {"s" : spacy_tags_raw} #, "y" : yake_tags_raw, "l" : links_tags_raw}
-    logs["tags"].Put(url_hash_encoded, json.dumps(tags_all).encode(encoding='UTF-8'))
-    print(json.dumps(tags_all), file=logs["tags_stream"])
+    log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
+    log_entry["spacy_tags"] = spacy_tags_raw
+    log_entry["yake_tags"] = yake_tags_raw
+    logs["tags"].Put(candidate['idb'], json.dumps(log_entry).encode(encoding='UTF-8'))
+    print(json.dumps(log_entry), file=logs["tags_stream"])
 
     return 1, response
 
