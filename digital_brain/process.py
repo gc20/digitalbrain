@@ -35,15 +35,15 @@ def process_html(candidate, html_path, md_path, logs):
 
     # Get HTML
     readability_article = readability.Document(html)
-    title = readability_article.title()
     html_content = readability_article.summary()
 
     # Prepare title
-    title = re.sub(r'[\\\/\:]', ' ', title)
-    title = re.sub(r'\s+', ' ', title)
-    title = title.strip()
+    title = candidate.get('title')
     if not title or len(title) < 5:
-        title = candidate.get('title')
+        title = readability_article.title()
+        title = re.sub(r'[\\\/\:]', ' ', title)
+        title = re.sub(r'\s+', ' ', title)
+        title = title.strip()
         if not title or len(title) < 5:
             return 0, "Could not extract meaningful title"
 
