@@ -4,14 +4,7 @@ import json
 import pathlib
 import re
 import markdown
-import bs4
-import yake
-import spacy
-
-
-# NLP
-spacy_nlp = spacy.load("en_core_web_lg") # python -m spacy download en_core_web_lg
-yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=None)
+from digital_brain import helper as db_helper
 
 # Process tags
 def __process_tag(tag):
@@ -20,18 +13,6 @@ def __process_tag(tag):
     tag = "#" + tag.strip("-")
     status = True if len(tag) >= 3 else False
     return tag, status
-
-# Convert markdown to text
-def __markdown_to_text(md):
-    # md -> html -> text since BeautifulSoup can extract text cleanly
-    html = markdown.markdown(md)
-    # remove code snippets
-    html = re.sub(r'<pre>(.*?)</pre>', ' ', html)
-    html = re.sub(r'<code>(.*?)</code >', ' ', html)
-    # extract text
-    soup = bs4.BeautifulSoup(html, "html.parser")
-    text = ''.join(soup.findAll(text=True))
-    return text
 
 # Extract tags from markdown
 def tag_markdown(candidate, md_path, permitted_tags, logs):
@@ -54,7 +35,8 @@ def tag_markdown(candidate, md_path, permitted_tags, logs):
     md = "\n".join(md_lines)
 
     # Get tags (spacy)
-    text_content = __markdown_to_text(md)
+    text_content = db_helper.markdown_to_text(md)
+    spacy_nlp = db_helper.get_spacy_nlp()
     spacy_doc = spacy_nlp(text_content)
     spacy_tags_raw = collections.defaultdict(int)
     for e in spacy_doc.ents:
@@ -66,6 +48,7 @@ def tag_markdown(candidate, md_path, permitted_tags, logs):
     spacy_tags = [tag for tag, _ in sorted(spacy_tags_raw.items(), key=lambda x: x[1], reverse=True) if permitted_tags is None or tag in permitted_tags]
 
     # Get tags (yake)
+    yake_nlp = db_helper.get_yake_nlp()
     yake_tags_result = yake_nlp.extract_keywords(text_content)
     yake_tags_raw = {}
     for entry in yake_tags_result:

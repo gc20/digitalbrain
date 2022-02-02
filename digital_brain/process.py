@@ -54,8 +54,10 @@ def process_html(candidate, html_path, md_path, logs):
     md_content = re.sub(r'[\#]+', ' ', md_content)
     md_content = re.sub(r'[\[]+', r'[', md_content)
     md_content = re.sub(r'[\]]+', r']', md_content)
-    if len(md_content) < 280:
-        return 0, "Text <280 chars"
+    if len(md_content) < 100:
+        return 0, "Text <100 chars"
+    if len(md_content) > 50000:
+        return 0, "Text >50000 chars"
     md_content = re.sub(r'\n\n[\n]+', r'\n\n', md_content)
     if candidate['type'] == "url":
         md_content = '[' + title + ']' + '(' + candidate['type_id'] + ')' + "\n\n" + md_content
