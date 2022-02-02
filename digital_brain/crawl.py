@@ -126,4 +126,5 @@ def run_crawl_job(candidates, html_path, logs, crawl_mode):
             print(crawl_stats)
     
     crawl_stats['success_rate'] = "0%" if crawl_stats['total'] == 0 else "%.2f" % (crawl_stats['status'][1] / crawl_stats['total'])
+    print(crawl_stats)
     return 1, json.dumps(crawl_stats)

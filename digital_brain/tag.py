@@ -99,4 +99,5 @@ def run_tag_job(candidates, md_path, logs):
         tag_stats['response'][response] = 1 if response not in tag_stats['response'] else tag_stats['response'][response]+1
         if tag_stats['total'] % 100 == 0:
             print(tag_stats)
+    print(tag_stats)
     return 1, json.dumps(tag_stats)

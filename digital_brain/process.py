@@ -86,6 +86,8 @@ def process_html(candidate, html_path, md_path, logs):
     # Write and store new file
     with open(md_filename, 'w') as f:
         print(md_content, file=f)
+    if candidate['path'] == "url_adhoc":
+        print("{} created".format(md_filename))
     log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
     log_entry["file"] = md_filename
     log_entry["time"] = int(time.time()) 
@@ -108,4 +110,5 @@ def run_process_job(candidates, html_path, md_path, logs):
         process_stats['response'][response] = 1 if response not in process_stats['response'] else process_stats['response'][response]+1
         if process_stats['total'] % 100 == 0:
             print(process_stats)
+    print(process_stats)
     return 1, json.dumps(process_stats)

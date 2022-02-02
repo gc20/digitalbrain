@@ -1,6 +1,5 @@
 ## Sample commands
-# python main.py --workflow 'crawl_url_adhoc' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --url_adhoc "https://huggingface.co/tasks/question-answering"
-# python main.py --workflow 'process_html_adhoc' --directory "/Users/Govind/Desktop/DB/" --mode="dev" --url_adhoc "https://huggingface.co/tasks/question-answering"
+# python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
 # python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/"
@@ -20,10 +19,10 @@ from experimental.summarization import experimental_summarization
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
-parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['crawl_url_adhoc', 'process_html_adhoc', 'crawl_job', 'process_job', 'tag_job', 'link_job', 'experimental_similarity', 'experimental_summarization'])
+parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['url_adhoc', 'crawl_job', 'process_job', 'tag_job', 'link_full_job', 'link_read_job', 'experimental_similarity', 'experimental_summarization'])
 parser.add_argument('--directory', help='Working directory', type=str, required=True)
 parser.add_argument('--mode', help='Mode to apply', type=str, default='prod', choices=['dev', 'prod'])
-parser.add_argument('--url_adhoc', help='Adhoc URL to act on', type=str)
+parser.add_argument('--url', help='Adhoc URL to act on', type=str)
 parser.add_argument('--crawl_mode', help='Crawling mode -> force (recrawl everything), retry (only failures), new (untried URLs)', type=str, default='new', choices=['force', 'retry', 'new'])
 args = parser.parse_args()
 
@@ -39,6 +38,7 @@ if __name__ == "__main__":
     html_path = os.path.join(working_directory, "html")
     input_path = os.path.join(working_directory, "input")
     md_path = os.path.join(working_directory, "md")
+    index_path = os.path.join(working_directory, "index")
     experimental_path = os.path.join(working_directory, "experimental")
 
     # Setup logs
@@ -52,35 +52,36 @@ if __name__ == "__main__":
 
     try:
 
-        candidates = None
-        if args.workflow.endswith("_adhoc"):
-            candidates = db_candidates.add_candidateid({"type_id" : args.url_adhoc, "type" : "url"})
+        if args.workflow == "url_adhoc":
+            candidates = [db_candidates.add_candidateid({"type_id" : args.url, "type" : "url", "path" : "url_adhoc"})]
+            status, response = db_crawl.run_crawl_job(candidates, html_path, logs, args.crawl_mode)
+            status, response = db_process.run_process_job(candidates, html_path, md_path, logs)
+            status, response = db_tag.run_tag_job(candidates, md_path, logs)
+            status, response = db_link.run_link_read_job(candidates, md_path, index_path, logs)
+
         else:
             candidates = db_candidates.get_seed_candidates(input_path)
 
-        if args.workflow == "crawl_url_adhoc":
-            status, response = db_crawl.crawl_url(candidates, html_path, logs, args.crawl_mode)
+            if args.workflow == 'crawl_job':
+                status, response = db_crawl.run_crawl_job(candidates, html_path, logs, args.crawl_mode)
 
-        elif args.workflow == 'process_html_adhoc':
-            status, response = db_process.process_html(candidates, html_path, md_path, logs)
+            elif args.workflow == 'process_job':
+                status, response = db_process.run_process_job(candidates, html_path, md_path, logs)
 
-        elif args.workflow == 'crawl_job':
-            status, response = db_crawl.run_crawl_job(candidates, html_path, logs, args.crawl_mode)
+            elif args.workflow == 'tag_job':
+                status, response = db_tag.run_tag_job(candidates, md_path, logs)
 
-        elif args.workflow == 'process_job':
-            status, response = db_process.run_process_job(candidates, html_path, md_path, logs)
+            elif args.workflow == 'link_full_job':
+                status, response = db_link.run_link_full_job(candidates, md_path, index_path, logs)
 
-        elif args.workflow == 'tag_job':
-            status, response = db_tag.run_tag_job(candidates, md_path, logs)
+            elif args.workflow == 'link_read_job':
+                status, response = db_link.run_link_read_job(candidates, md_path, index_path, logs)
 
-        elif args.workflow == 'link_job':
-            status, response = db_link.run_link_job(candidates, md_path, logs)
+            elif args.workflow == 'experimental_similarity':
+                status, response = experimental_similarity(candidates, experimental_path, logs)
 
-        elif args.workflow == 'experimental_similarity':
-            status, response = experimental_similarity(candidates, experimental_path, logs)
-
-        elif args.workflow == 'experimental_summarization':
-            status, response = experimental_summarization(candidates, experimental_path, logs)
+            elif args.workflow == 'experimental_summarization':
+                status, response = experimental_summarization(candidates, experimental_path, logs)
 
     except Exception as e:
         status, response = 0, str(e)
