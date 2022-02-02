@@ -22,9 +22,7 @@ parser.add_argument('--workflow', help='Workflow to run', type=str, required=Tru
 parser.add_argument('--directory', help='Working directory', type=str, required=True)
 parser.add_argument('--mode', help='Mode to apply', type=str, default='prod', choices=['dev', 'prod'])
 parser.add_argument('--url_adhoc', help='Adhoc URL to act on', type=str)
-parser.add_argument('--crawl_override', dest='crawl_override', action='store_true')
-parser.add_argument('--no-crawl_override', dest='crawl_override', action='store_false')
-parser.set_defaults(crawl_override=False)
+parser.add_argument('--crawl_mode', help='Crawling mode -> force (recrawl everything), retry (only failures), new (untried URLs)', type=str, default='new', choices=['force', 'retry', 'new'])
 args = parser.parse_args()
 
 if __name__ == "__main__":
@@ -52,7 +50,7 @@ if __name__ == "__main__":
 
         if args.workflow == 'crawl_url_adhoc':
             candidate_adhoc = db_candidates.add_candidateid({"type_id" : args.url_adhoc, "type" : "url"})
-            status, response = db_crawl.crawl_url(candidate_adhoc, html_path, logs, args.crawl_override)
+            status, response = db_crawl.crawl_url(candidate_adhoc, html_path, logs, args.crawl_mode)
 
         elif args.workflow == 'process_html_adhoc':
             candidate_adhoc = db_candidates.add_candidateid({"type_id" : args.url_adhoc, "type" : "url"})
@@ -63,7 +61,7 @@ if __name__ == "__main__":
             candidates = db_candidates.get_seed_candidates(input_path)
 
             if args.workflow == 'crawl_job':
-                status, response = db_crawl.run_crawl_job(candidates, html_path, logs, args.crawl_override)
+                status, response = db_crawl.run_crawl_job(candidates, html_path, logs, args.crawl_mode)
 
             elif args.workflow == 'process_job':
                 status, response = db_process.run_process_job(candidates, html_path, md_path, logs)

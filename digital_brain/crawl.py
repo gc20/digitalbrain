@@ -11,7 +11,7 @@ import mammoth
 import markdown
 
 # Crawl and store webpage
-def crawl_url(candidate, html_path, logs, crawl_override):
+def crawl_url(candidate, html_path, logs, crawl_mode):
 
     # Basic checks
     url = candidate['type_id']
@@ -21,14 +21,18 @@ def crawl_url(candidate, html_path, logs, crawl_override):
     # Get HTML location
     html_filename = os.path.join(html_path, candidate['id'] + ".html")
 
-    # Pre-existing crawl check
-    if crawl_override is False and os.path.exists(html_filename):
-        try:
-            previous_crawl = json.loads(logs["crawl"].Get(candidate['idb']).decode())
-            if previous_crawl['status'] == 200:
-                return 0, "HTML pre-exists"
-        except Exception as e:
-            pass
+    # Crawl mode compliance check
+    if crawl_mode != "force":
+        if os.path.exists(html_filename): # This line is redundant since we're checking logs, but it's there to take care of file/log mismatch
+            try:
+                previous_crawl = json.loads(logs["crawl"].Get(candidate['idb']).decode())
+                if previous_crawl.get('status'):
+                    if crawl_mode == "new":
+                        return 1, "crawl_mode=new & crawl previously attempted"
+                    elif crawl_mode == "retry" and previous_crawl['status'] == 200:
+                        return 1, "crawl_mode=retry & successful crawl previously done"
+            except Exception as e:
+                pass
 
     # Crawl
     response = requests.get(url, timeout=10)
@@ -92,7 +96,7 @@ def store_as_html(candidate, html_path, logs):
     return 1, "Stored"
 
 # Run crawl job
-def run_crawl_job(candidates, html_path, logs, crawl_override):
+def run_crawl_job(candidates, html_path, logs, crawl_mode):
 
     crawl_stats = {"total" : 0, "status" : {1: 0, 0: 0}, "response" : {}}
     random.shuffle(candidates)
@@ -103,7 +107,7 @@ def run_crawl_job(candidates, html_path, logs, crawl_override):
         # URL
         if candidate['type'] == "url":
             try:
-                status, response = crawl_url(candidate, html_path, logs, crawl_override)
+                status, response = crawl_url(candidate, html_path, logs, crawl_mode)
             except Exception as e:
                 response = str(e)[0:200]
 
