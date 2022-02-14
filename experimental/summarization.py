@@ -15,8 +15,8 @@ def experimental_summarization(candidates, experimental_path, logs):
     entries = helper.get_candidate_entries(candidates, logs)
     generated_at = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-    model = transformers.BartForConditionalGeneration.from_pretrained("sshleifer/distilbart-cnn-12-6")
-    tokenizer = transformers.BartTokenizer.from_pretrained("sshleifer/distilbart-cnn-12-6")
+    model = transformers.BartForConditionalGeneration.from_pretrained("sshleifer/distilbart-xsum-12-1")
+    tokenizer = transformers.BartTokenizer.from_pretrained("sshleifer/distilbart-xsum-12-1")
 
     with open(os.path.join(experimental_path, "summarization.json"), "a") as f:
         max_chunk_size = 8

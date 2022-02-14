@@ -29,9 +29,9 @@ def tag_markdown(candidate, md_path, permitted_tags, logs):
 
     # Clean out existing tags
     md_lines = md.strip("\n").split("\n")
-    # md_lines = [line for line in md_lines if not re.search(r'^Auto-tags:', line)]
-    if re.search(r'^Auto-tags:', md_lines[-1]):
-        _ = md_lines.pop()
+    md_lines = [line for line in md_lines if not re.search(r'^Auto-tags:', line)]
+    # if re.search(r'^Auto-tags:', md_lines[-1]):
+    #     _ = md_lines.pop()
     md = "\n".join(md_lines)
 
     # Get tags (spacy)
@@ -39,13 +39,16 @@ def tag_markdown(candidate, md_path, permitted_tags, logs):
     spacy_nlp = db_helper.get_spacy_nlp()
     spacy_doc = spacy_nlp(text_content)
     spacy_tags_raw = collections.defaultdict(int)
+    spacy_tags_raw_type = collections.defaultdict(lambda: collections.defaultdict(int))
     for e in spacy_doc.ents:
         if e.label_ not in set(['DATE', 'PERCENT', 'CARDINAL', 'MONEY', 'TIME', 'ORDINAL']):
             if not re.search(r'\s\s', e.text):
                 tag, tag_status = __process_tag(e.text)
                 if tag_status:
                     spacy_tags_raw[tag] += 1
-    spacy_tags = [tag for tag, _ in sorted(spacy_tags_raw.items(), key=lambda x: x[1], reverse=True) if permitted_tags is None or tag in permitted_tags]
+                    spacy_tags_raw_type[tag][e.label_] += 1
+    spacy_tags_type = {tag : max(tag_types, key=tag_types.get) for tag, tag_types in spacy_tags_raw_type.items()}
+    spacy_tags = [tag + " ({})".format(spacy_tags_type[tag]) for tag, _ in sorted(spacy_tags_raw.items(), key=lambda x: x[1], reverse=True) if permitted_tags is None or tag in permitted_tags]
 
     # Get tags (yake)
     yake_nlp = db_helper.get_yake_nlp()
@@ -78,6 +81,7 @@ def tag_markdown(candidate, md_path, permitted_tags, logs):
     # Log tags
     log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
     log_entry["spacy_tags"] = spacy_tags_raw
+    log_entry["spacy_tags_type"] = spacy_tags_raw_type
     log_entry["yake_tags"] = yake_tags_raw
     logs["tags"].Put(candidate['idb'], json.dumps(log_entry).encode(encoding='UTF-8'))
     print(json.dumps(log_entry), file=logs["tags_stream"])

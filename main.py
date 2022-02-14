@@ -3,7 +3,7 @@
 # python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/"
-# python main.py --workflow 'link_job' --directory "/Users/Govind/Desktop/DB/"
+# python main.py --workflow 'link_full_job' --directory "/Users/Govind/Desktop/DB/"
 # python main.py --workflow 'experimental_similarity' --directory "/Users/Govind/Desktop/DB/"
 
 import argparse

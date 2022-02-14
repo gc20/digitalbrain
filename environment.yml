@@ -72,6 +72,7 @@ leveldb==0.201
 libclang==13.0.0
 lockfile==0.12.2
 lxml==4.7.1
+mailbox==0.4
 mammoth==1.4.18
 Markdown==3.3.6
 markdownify==0.10.1
@@ -138,7 +139,7 @@ scikit-learn==1.0.2
 scipy==1.7.3
 segtok==1.5.11
 selectivesearch==0.4
-sentence-transformers==2.1.0
+sentence-transformers==2.2.0
 sentencepiece==0.1.96
 sgmllib3k==1.0.0
 shellingham==1.4.0

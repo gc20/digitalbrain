@@ -29,15 +29,15 @@ def get_embedded_entry(candidate, md_path, logs):
 
     # Convert to text and embed
     text_content = db_helper.markdown_to_text(md)
-    spacy_nlp = db_helper.get_spacy_nlp()
-    spacy_doc = spacy_nlp(text_content)
+    sentencetransformer_model = db_helper.get_sentence_transformer()
+    sentence_embedding = sentencetransformer_model.encode(text_content, convert_to_tensor=True)
 
     # Prepare embedded entry
     embedded_entry = {k : candidate[k] for k in ["idb", "id", "type", "type_id"]}
     embedded_entry["file"] = md_filename
     embedded_entry["file_title"] = os.path.split(md_filename)[-1]
     embedded_entry["path_relative"] = md_filename.replace(md_path, "")
-    embedded_entry["embedding"] = numpy.float32(spacy_doc.vector)
+    embedded_entry["embedding"] = sentence_embedding
     embedded_entry["md"] = md
 
     return 1, "Embedded", embedded_entry
@@ -45,22 +45,25 @@ def get_embedded_entry(candidate, md_path, logs):
 
 # Build & store FAISS index + embedding entries 
 def build_faiss_index(embedded_entries, index_path):
-    with open(os.path.join(index_path, "faiss_embedded_entries.pickle"), 'wb') as handle:
+    with open(os.path.join(index_path, "faiss_docs_sentencetransformers_embeddedentries.pickle"), 'wb') as handle:
         pickle.dump(embedded_entries, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    embeddings = [embedded_entries[i]["embedding"] for i in range(len(embedded_entries))]
-    index = faiss.IndexFlatL2(300) # hardcoded based on Spacy vector default
+    embeddings = [embedded_entries[i]["embedding"].cpu().detach().numpy() for i in range(len(embedded_entries))] # detach -> numpy is for pytorch tensors
+    index = faiss.IndexFlatL2(384) # hardcoded based on sentence_transformer
+    # index = faiss.IndexFlatIP(300) # hardcoded based on Spacy vector default
+    # embeddings_np = numpy.array(embeddings)
+    # faiss.normalize_L2(embeddings_np) # Cosine similarity hack for FAISS (https://www.lftechnology.com/blog/ai/faiss-basics/); Spacy expects cosine (https://spacy.io/api/token#similarity)
     index.add(numpy.array(embeddings))
     print("FAISS index built with {} entries. Training status: {}".format(index.ntotal, index.is_trained))
-    faiss.write_index(index, os.path.join(index_path, "faiss_vector.index"))
+    faiss.write_index(index, os.path.join(index_path, "faiss_docs_sentencetransformers.index"))
     return index
 
 
 # Load FAISS index + embedding entries
 def load_faiss_index(index_path):
     embedded_entries, embedded_entries_lookup = None, {}
-    with open(os.path.join(index_path, "faiss_embedded_entries.pickle"), 'rb') as handle:
+    with open(os.path.join(index_path, "faiss_docs_sentencetransformers_embeddedentries.pickle"), 'rb') as handle:
         embedded_entries = pickle.load(handle)
-    index = faiss.read_index(os.path.join(index_path, "faiss_vector.index"))
+    index = faiss.read_index(os.path.join(index_path, "faiss_docs_sentencetransformers.index"))
     print("Loaded FAISS index & embedded entries")
     return embedded_entries, index
 
