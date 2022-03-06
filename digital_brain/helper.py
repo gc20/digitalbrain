@@ -4,6 +4,9 @@ import spacy
 import yake
 import sentence_transformers
 import markdown
+import os
+import faiss
+import pickle
 
 # Convert markdown to text (md -> html -> text since BeautifulSoup can extract text cleanly)
 def markdown_to_text(md):
@@ -37,3 +40,12 @@ def get_yake_nlp():
 sentencetransformer_model = sentence_transformers.SentenceTransformer('all-MiniLM-L6-v2')
 def get_sentence_transformer():
     return sentencetransformer_model
+
+# Load FAISS index + embedding entries
+def load_faiss_index(index_path):
+    embedded_entries = None
+    with open(os.path.join(index_path, "faiss_docs_sentencetransformers_embeddedentries.pickle"), 'rb') as handle:
+        embedded_entries = pickle.load(handle)
+    index = faiss.read_index(os.path.join(index_path, "faiss_docs_sentencetransformers.index"))
+    print("Loaded FAISS index & embedded entries")
+    return embedded_entries, index
