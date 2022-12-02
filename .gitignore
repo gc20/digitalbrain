@@ -1,5 +1,6 @@
 .DS_Store
-prod/
+prod_self/
+prod_work/
 dev/
 .obsidian/
 *.db
