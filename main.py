@@ -19,7 +19,7 @@ from digital_brain import embed as db_embed
 from digital_brain import retrain as db_retrain
 from digital_brain import tag as db_tag
 from digital_brain import link as db_link
-from digital_brain import qna as db_qna
+from digital_brain import queryann as db_queryann
 from experimental.similarity import experimental_similarity
 from experimental.summarization import experimental_summarization
 
@@ -70,7 +70,7 @@ if __name__ == "__main__":
             status, response = db_link.run_link_job(candidates, md_path, index_path, logs)
 
         elif args.workflow == "queries_adhoc":
-            status, response = db_qna.run_qna_job(args.queries, index_path, adhoc_path)
+            status, response = db_queryann.run_queryann_job(args.queries, index_path, adhoc_path)
 
         else:
             candidates = db_candidates.get_seed_candidates(input_path)

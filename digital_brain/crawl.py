@@ -73,13 +73,6 @@ def run_crawl_job(candidates, html_path, logs, crawl_mode):
         except Exception as e:
             response = str(e)[0:200]
 
-        # File
-        elif candidate['type'] == "file":
-            try:
-                status, response = store_as_html(candidate, html_path, logs)
-            except Exception as e:
-                response = str(e)[0:200]
-
         # Stats
         crawl_stats['total'] += 1
         crawl_stats['status'][status] += 1

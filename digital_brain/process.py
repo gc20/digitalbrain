@@ -126,7 +126,7 @@ def store_as_html(candidate, html_path, logs):
     # Save
     html_filename = os.path.join(html_path, candidate['id'] + ".html")
     with open(html_filename, "w") as f:
-        f.write(content)
+        _ = f.write(content)
 
     # # Log
     # log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
