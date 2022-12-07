@@ -35,7 +35,7 @@ def __parse_local_files(candidates, folder_path, file_path):
     for filename in pathlib.Path(file_path).rglob('*'):
         filename = filename.as_posix()
         extension = filename.split(".")[-1].lower()
-        if extension in ["html", "txt", "docx", "md"]: # "pdf", "doc"
+        if extension in ["html", "txt", "docx", "md"]: # and "googledrive_backup" in file_path: # "pdf", "doc"
             candidates.append(add_candidateid({
                 "type" : "file",
                 "type_id" : filename,

@@ -3,6 +3,7 @@ import os
 import numpy
 import json
 import collections
+import pathlib
 
 # Run Q&A job
 def run_qna_job(queries, index_path, adhoc_path):
@@ -19,16 +20,20 @@ def run_qna_job(queries, index_path, adhoc_path):
             distances, neighbors = faiss_index.search(numpy.array([query_embedding]), k=5)
             for i in range(len(distances)):
                 entry = {"query" : query, "results" : []}
-                for distance, neighbor_fid in zip(distances[i], neighbors[i]):
-                    if neighbor_fid < 0 or distance < 0.001:
-                        continue
-                    entry['results'].append({
-                        "file" : target_embedded_entries[neighbor_fid]['file'],
-                        "file_title" : target_embedded_entries[neighbor_fid]['file_title'],
-                        "md" : target_embedded_entries[neighbor_fid]['md'],
-                        "distance" : str(distance)
-                    })
+                with open(os.path.join(adhoc_path, "qna_enumerated", query + ".json"), "w") as fenum:
+                    for distance, neighbor_fid in zip(distances[i], neighbors[i]):
+                        if neighbor_fid < 0 or distance < 0.001:
+                            continue
+                        entry['results'].append({
+                            "file" : target_embedded_entries[neighbor_fid]['file'],
+                            "file_title" : target_embedded_entries[neighbor_fid]['file_title'],
+                            "md" : target_embedded_entries[neighbor_fid]['md'],
+                            "distance" : str(distance)
+                        })
+                        print("File " + str(len(entry['results'])) + ": ", file=fenum)
+                        print(target_embedded_entries[neighbor_fid]['md'] + "\n\n", file=fenum)
                 print(json.dumps(entry), file=f)
                 query_status[len(distances[i])] += 1
+
     
     return 1, json.dumps(query_status)

@@ -96,6 +96,44 @@ def process_html(candidate, html_path, md_path, logs):
     return 1, ".md was created"
 
 
+# Convert file to html
+def store_as_html(candidate, html_path, logs):
+
+    # Read content
+    content = None
+    filename = candidate['type_id']
+    try:
+        if candidate['extension'] == "html":
+            content = pathlib.Path(filename).read_text()
+        elif candidate['extension'] == "txt":
+            content = pathlib.Path(filename).read_text()
+        elif candidate['extension'] == "docx":
+            with open(filename, "rb") as docx_file:
+                result = mammoth.convert_to_html(docx_file)
+                content = result.value
+        elif candidate['extension'] == "md":
+            content = pathlib.Path(filename).read_text()
+            content = markdown.markdown(content)
+        else:
+            return 0, "{} format not supported".format(candidate['extension'])
+    except Exception as e:
+        return 0, "{} content could not be read".format(candidate['extension'])
+
+    # Check if content is valid
+    if content is None or len(content) < 5:
+        return 0, "Empty content extracted"
+
+    # Save
+    html_filename = os.path.join(html_path, candidate['id'] + ".html")
+    with open(html_filename, "w") as f:
+        f.write(content)
+
+    # # Log
+    # log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
+    # log_entry["status"] = response.status_code
+    # log_entry["time"] = int(time.time()) 
+    # logs["crawl"].Put(candidate['idb'], json.dumps(log_entry).encode(encoding='UTF-8'))
+
 # Run process job
 def run_process_job(candidates, html_path, md_path, logs):
     process_stats = {"total" : 0, "status" : {1: 0, 0: 0}, "response" : {}}
@@ -103,6 +141,8 @@ def run_process_job(candidates, html_path, md_path, logs):
         status, response = 0, ""
         try:
             process_stats['total'] += 1
+            if candidate['type'] == "file":
+                store_as_html(candidate, html_path, logs)
             status, response = process_html(candidate, html_path, md_path, logs)
         except Exception as e:
             response = str(e)[0:50]

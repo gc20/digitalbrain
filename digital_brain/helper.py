@@ -37,7 +37,7 @@ yake_nlp = yake.KeywordExtractor(lan="en", n=3, dedupLim=0.9, top=10, features=N
 def get_yake_nlp():
     return yake_nlp
 
-sentencetransformer_model = sentence_transformers.SentenceTransformer('all-MiniLM-L6-v2')
+sentencetransformer_model = sentence_transformers.SentenceTransformer('msmarco-distilbert-base-v4')
 def get_sentence_transformer():
     return sentencetransformer_model
 

@@ -1,12 +1,13 @@
 ## Sample commands
-# python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
-# python main.py --workflow 'queries_adhoc' --directory "/Users/Govind/Desktop/DB/" --queries "Who is the founder of YCombinator?; What is web3?"
-# python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/"
-# python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/"
-# python main.py --workflow 'embed_job' --directory "/Users/Govind/Desktop/DB/"
-# python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/"
-# python main.py --workflow 'link_job' --directory "/Users/Govind/Desktop/DB/"
-# python main.py --workflow 'experimental_similarity' --directory "/Users/Govind/Desktop/DB/"
+# python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
+# python main.py --workflow 'queries_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --queries "Who is the founder of YCombinator?; What is web3?"
+# python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'embed_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'retrain_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'link_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'experimental_similarity' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
 
 import argparse
 import os
@@ -15,6 +16,7 @@ from digital_brain import candidates as db_candidates
 from digital_brain import crawl as db_crawl
 from digital_brain import process as db_process
 from digital_brain import embed as db_embed
+from digital_brain import retrain as db_retrain
 from digital_brain import tag as db_tag
 from digital_brain import link as db_link
 from digital_brain import qna as db_qna
@@ -23,9 +25,9 @@ from experimental.summarization import experimental_summarization
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
-parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['url_adhoc', 'queries_adhoc', 'crawl_job', 'process_job', 'embed_job', 'tag_job', 'link_job', 'experimental_similarity', 'experimental_summarization'])
+parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['url_adhoc', 'queries_adhoc', 'crawl_job', 'process_job', 'embed_job', 'retrain_job', 'tag_job', 'link_job', 'experimental_similarity', 'experimental_summarization'])
 parser.add_argument('--directory', help='Working directory', type=str, required=True)
-parser.add_argument('--mode', help='Mode to apply', type=str, default='prod', choices=['dev', 'prod'])
+parser.add_argument('--mode', help='Mode to apply', type=str, default='prod_work', choices=['dev', 'prod_self', 'prod_work'])
 parser.add_argument('--url', help='Adhoc URL to act on', type=str)
 parser.add_argument('--queries', help='Adhoc queries to act on', type=str)
 parser.add_argument('--crawl_mode', help='Crawling mode -> force (recrawl everything), retry (only failures), new (untried URLs)', type=str, default='new', choices=['force', 'retry', 'new'])
@@ -63,6 +65,7 @@ if __name__ == "__main__":
             status, response = db_crawl.run_crawl_job(candidates, html_path, logs, args.crawl_mode)
             status, response = db_process.run_process_job(candidates, html_path, md_path, logs)
             status, response = db_embed.run_embed_job(candidates, md_path, index_path, logs, append=True)
+            status, response = db_retrain.run_retrain_job(candidates, md_path, index_path, logs, append=True)
             status, response = db_tag.run_tag_job(candidates, md_path, logs)
             status, response = db_link.run_link_job(candidates, md_path, index_path, logs)
 
@@ -80,6 +83,9 @@ if __name__ == "__main__":
 
             elif args.workflow == 'embed_job':
                 status, response = db_embed.run_embed_job(candidates, md_path, index_path, logs)
+
+            elif args.workflow == 'retrain_job':
+                status, response = db_retrain.run_retrain_job(candidates, md_path, index_path, logs)
 
             elif args.workflow == 'tag_job':
                 status, response = db_tag.run_tag_job(candidates, md_path, logs)

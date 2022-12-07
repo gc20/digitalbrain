@@ -1,3 +1,5 @@
+# source /Users/Govind/miniconda/etc/profile.d/conda.sh
+
 import sys
 sys.path.append("..")
 import mailbox
@@ -6,6 +8,7 @@ import json
 import re
 import os
 import hashlib
+import quopri
 
 def get_html_text(html):
     try:
@@ -63,8 +66,8 @@ def store_entry(entry, processed_folder, log_file, stats):
     if 'Trash' in entry['email_labels']:
         stats["trash"] += 1
         return
-    body = [t[2] for t in entry['email_text'] if t[0] in ['text/plain', 'text/html'] and len(t) == 3 and t[2] is not None]
-    if len(body) == 0:
+    body_text = [t[2] for t in entry['email_text'] if t[0] in ['text/plain'] and len(t) == 3 and t[2] is not None]
+    if len(body_text) == 0:
         stats["no_body"] += 1
         return
     from_email = re.search(r'^.*?<([^\>]*)>$', entry['email_from'] or "-")
@@ -79,24 +82,27 @@ def store_entry(entry, processed_folder, log_file, stats):
     to_email = to_email.group(1)
     folder_name = processed_folder + from_email + "/" + to_email + "/" 
     file_name = (re.sub(r'[\s\/\\\"\']+', '-', entry['email_subject'].strip()) or "-")
-    html = [
+    body_meta = "\n".join([
         "From: " + (entry['email_from'] or "-"),
         "To: " + (entry['email_to'] or "-"),
         "Date: " + (entry['email_date'] or "-"),
         "Subject: " + (entry['email_subject'] or "-"),
         "Labels: " + (entry['email_labels'] or "-"),
-        "Body: "
-    ] + body
-    html = "\n".join(html)
-    html = re.sub(r'\n+', '\n', html)
+        "Body: " + "\n"
+    ])
+    body_text = "\n".join(body_text)
+    body_text = re.sub(r'\n\n+', '\n', re.sub(r'[> ]+\n', '\n', body_text))
+    # body_text = quopri.decodestring(body_text)
+    body = body_meta + body_text
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-    if os.path.exists(folder_name + file_name + ".html"):
-        md5 = hashlib.md5(html.encode('utf-8')).hexdigest()
+    if os.path.exists(folder_name + file_name + ".txt"):
+        md5 = hashlib.md5(body.encode('utf-8')).hexdigest()
         file_name += "-" + md5
         stats["clash"] += 1
-    with open(folder_name + file_name + ".html", "w") as f:
-        print(html, file=f)
+    with open(folder_name + file_name + ".txt", "w") as f:
+        # print(json.dumps(entry),file=f)
+        print(body, file=f)
     stats["done"] += 1
     print(json.dumps({
         "from" : from_email,
