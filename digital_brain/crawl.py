@@ -55,45 +55,6 @@ def crawl_url(candidate, html_path, logs, crawl_mode):
         return 0, "HTTP status {}".format(response.status_code)
     return 1, "Crawled!"
 
-# Convert file to html
-def store_as_html(candidate, html_path, logs):
-
-    # Read content
-    content = None
-    filename = candidate['type_id']
-    try:
-        if candidate['extension'] == "html":
-            content = pathlib.Path(filename).read_text()
-        elif candidate['extension'] == "txt":
-            content = pathlib.Path(filename).read_text()
-        elif candidate['extension'] == "docx":
-            with open(filename, "rb") as docx_file:
-                result = mammoth.convert_to_html(docx_file)
-                content = result.value
-        elif candidate['extension'] == "md":
-            content = pathlib.Path(filename).read_text()
-            content = markdown.markdown(content)
-        else:
-            return 0, "{} format not supported".format(candidate['extension'])
-    except Exception as e:
-        return 0, "{} content could not be read".format(candidate['extension'])
-
-    # Check if content is valid
-    if content is None or len(content) < 5:
-        return 0, "Empty content extracted"
-
-    # Save
-    html_filename = os.path.join(html_path, candidate['id'] + ".html")
-    with open(html_filename, "w") as f:
-        f.write(content)
-
-    # # Log
-    # log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
-    # log_entry["status"] = response.status_code
-    # log_entry["time"] = int(time.time()) 
-    # logs["crawl"].Put(candidate['idb'], json.dumps(log_entry).encode(encoding='UTF-8'))
-
-    return 1, "Stored"
 
 # Run crawl job
 def run_crawl_job(candidates, html_path, logs, crawl_mode):
@@ -102,14 +63,15 @@ def run_crawl_job(candidates, html_path, logs, crawl_mode):
     random.shuffle(candidates)
     for candidate in tqdm.tqdm(candidates):
 
-        status, response = 0, ""
+        if candidate['type'] != "url":
+            continue
 
-        # URL
-        if candidate['type'] == "url":
-            try:
-                status, response = crawl_url(candidate, html_path, logs, crawl_mode)
-            except Exception as e:
-                response = str(e)[0:200]
+        # Crawl
+        status, response = 0, ""
+        try:
+            status, response = crawl_url(candidate, html_path, logs, crawl_mode)
+        except Exception as e:
+            response = str(e)[0:200]
 
         # File
         elif candidate['type'] == "file":
