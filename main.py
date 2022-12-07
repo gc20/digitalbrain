@@ -8,6 +8,8 @@
 # python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
 # python main.py --workflow 'link_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
 # python main.py --workflow 'experimental_similarity' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'experimental_summarization' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
+# python main.py --workflow 'experimental_querygen' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
 
 import argparse
 import os
@@ -22,10 +24,11 @@ from digital_brain import link as db_link
 from digital_brain import queryann as db_queryann
 from experimental.similarity import experimental_similarity
 from experimental.summarization import experimental_summarization
+from experimental.querygen import experimental_querygen
 
 # Arguments
 parser = argparse.ArgumentParser(description='Command center')
-parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['url_adhoc', 'queries_adhoc', 'crawl_job', 'process_job', 'embed_job', 'retrain_job', 'tag_job', 'link_job', 'experimental_similarity', 'experimental_summarization'])
+parser.add_argument('--workflow', help='Workflow to run', type=str, required=True, choices=['url_adhoc', 'queries_adhoc', 'crawl_job', 'process_job', 'embed_job', 'retrain_job', 'tag_job', 'link_job', 'experimental_similarity', 'experimental_summarization', 'experimental_querygen'])
 parser.add_argument('--directory', help='Working directory', type=str, required=True)
 parser.add_argument('--mode', help='Mode to apply', type=str, default='prod_work', choices=['dev', 'prod_self', 'prod_work'])
 parser.add_argument('--url', help='Adhoc URL to act on', type=str)
@@ -98,6 +101,9 @@ if __name__ == "__main__":
 
             elif args.workflow == 'experimental_summarization':
                 status, response = experimental_summarization(candidates, experimental_path, logs)
+
+            elif args.workflow == 'experimental_querygen':
+                status, response = experimental_querygen(candidates, experimental_path, logs)
 
     except Exception as e:
         status, response = 0, str(e)

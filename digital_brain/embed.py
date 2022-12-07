@@ -47,11 +47,12 @@ def build_faiss_index(embedded_entries, index_path):
     with open(os.path.join(index_path, "faiss_docs_sentencetransformers_embeddedentries.pickle"), 'wb') as handle:
         pickle.dump(embedded_entries, handle, protocol=pickle.HIGHEST_PROTOCOL)
     embeddings = [embedded_entries[i]["embedding"] for i in range(len(embedded_entries))]
-    index = faiss.IndexFlatL2(768) # hardcoded based on sentence_transformer
-    # index = faiss.IndexFlatIP(300) # hardcoded based on Spacy vector default
-    # embeddings_np = numpy.array(embeddings)
+    # index = faiss.IndexFlatL2(768) # hardcoded based on sentence_transformer
+    # index.add(numpy.array(embeddings))
+    index = faiss.IndexFlatIP(768) # hardcoded based on sentence_transformer
+    embeddings_np = numpy.array(embeddings)
     # faiss.normalize_L2(embeddings_np) # Cosine similarity hack for FAISS (https://www.lftechnology.com/blog/ai/faiss-basics/); Spacy expects cosine (https://spacy.io/api/token#similarity)
-    index.add(numpy.array(embeddings))
+    index.add(embeddings_np)
     print("FAISS index built with {} entries. Training status: {}".format(index.ntotal, index.is_trained))
     faiss.write_index(index, os.path.join(index_path, "faiss_docs_sentencetransformers.index"))
     return index
