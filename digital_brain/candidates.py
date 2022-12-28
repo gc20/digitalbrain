@@ -27,7 +27,7 @@ def get_seed_candidates(input_path):
                 candidates.append(add_candidateid({
                     "type" : "file",
                     "type_id" : filename,
-                    "path" : os.path.dirname(re.sub(r'^' + re.escape(seed_folderpath) + r'[\/]*', '', filename)),
+                    "path" : os.path.dirname(re.sub(r'^' + re.escape(input_path) + r'[\/]*', '', filename)),
                     "title" : os.path.split(filename)[-1],
                     "extension" : extension
                 }))
