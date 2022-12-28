@@ -114,9 +114,9 @@ def store_entry(entry, processed_folder, log_file, stats):
 
 if __name__ == "__main__":
     
-    input_fn = '/Users/Govind/Desktop/DB/Data/sem3-email.mbox'
-    processed_folder = "/tmp/s3email_mbox/" 
-    log_fn = "/tmp/s3email_mbox.log"
+    input_fn = '/Users/Govind/Desktop/DB/Data/ss-email.mbox'
+    processed_folder = "/Users/Govind/Desktop/DB/code/v1-digitalbrain/prod_work/input/ssemail_mbox/" 
+    log_fn = "/tmp/ssemail_mbox.log"
 
     # Extract intermediate_fn
     mbox_obj = mailbox.mbox(input_fn)

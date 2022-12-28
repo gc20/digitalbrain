@@ -9,6 +9,7 @@ import collections
 import json
 import pathlib
 import time
+import pdfminer.high_level
 
 # Parse to markdown from HTML
 def process_html(candidate, html_path, md_path, logs):
@@ -85,7 +86,7 @@ def process_html(candidate, html_path, md_path, logs):
 
     # Write and store new file
     with open(md_filename, 'w') as f:
-        print(md_content, file=f)
+        _ = print(md_content, file=f)
     if candidate['path'] == "url_adhoc":
         print("{} created".format(md_filename))
     log_entry = {k : candidate[k] for k in ["id", "type", "type_id"]}
@@ -111,6 +112,8 @@ def store_as_html(candidate, html_path, logs):
             with open(filename, "rb") as docx_file:
                 result = mammoth.convert_to_html(docx_file)
                 content = result.value
+        elif candidate['extension'] == "pdf":
+            content = pdfminer.high_level.extract_text(filename)
         elif candidate['extension'] == "md":
             content = pathlib.Path(filename).read_text()
             content = markdown.markdown(content)
