@@ -1,9 +1,3 @@
-#To Dos
-# 1] Add slack/notion/googledocs integrations/data + test run + commit
-# 2] Airbyte format
-# 3] OpenAI embeddings
-
-
 ## Sample commands
 # python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
 # python main.py --workflow 'queries_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --queries "Who is the founder of YCombinator?; What is web3?"
