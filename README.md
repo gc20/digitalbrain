@@ -1,7 +1,7 @@
 ## Sample commands
 
 ### Setup
-cd prod_work && mkdir adhoc experimental html index input log md
+```cd prod_work && mkdir adhoc experimental html index input log md```
 - input: contains data that needs to be processedl; can include symlinks, actual data or .urls files. My current input/ folder has the following entries: "chrome_bookmarks evernote gmail local notion slack"
 - html: Data is ingested and stored in html format
 - md: Data is further processed and stored in md format (I happen to have followed a lot of the steps as page 15 of WebGPT - https://arxiv.org/pdf/2112.09332.pdf; except this one where I picked md instead of simple HTML)
@@ -11,7 +11,7 @@ cd prod_work && mkdir adhoc experimental html index input log md
 - experimental: stores results of experimental work
 
 ### Crawl and store an adhoc URL
-python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
+```python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
 
 ### Run adhoc searches
 python main.py --workflow 'queries_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --queries "Who is the founder of YCombinator?; What is web3?"
@@ -42,4 +42,4 @@ python main.py --workflow 'experimental_summarization' --directory "/Users/Govin
 
 ### [Experimental] Document to query generation (for generating fine-tuning samples)
 python main.py --workflow 'experimental_querygen' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-
+```
