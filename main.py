@@ -1,16 +1,3 @@
-## Sample commands
-# python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
-# python main.py --workflow 'queries_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --queries "Who is the founder of YCombinator?; What is web3?"
-# python main.py --workflow 'crawl_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'process_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'embed_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'retrain_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'tag_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'link_job' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'experimental_similarity' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'experimental_summarization' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-# python main.py --workflow 'experimental_querygen' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/"
-
 import argparse
 import os
 import leveldb # consider plyvel
