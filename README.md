@@ -1,6 +1,8 @@
-## Sample commands
+## About
+- Ingest data from knowledge tools and builds semantic search
+- [TBD] Results to be fed as context into LLMs and endpoints to be exposed as services to slackbots/extensions
 
-### Setup
+## Setup
 ```cd prod_work && mkdir adhoc experimental html index input log md```
 - input: contains data that needs to be processedl; can include symlinks, actual data or .urls files. My current input/ folder has the following entries: "chrome_bookmarks evernote gmail local notion slack"
 - html: Data is ingested and stored in html format
@@ -10,8 +12,10 @@
 - adhoc: stores results of adhoc queries
 - experimental: stores results of experimental work
 
+## Sample commands
+```
 ### Crawl and store an adhoc URL
-```python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
+python main.py --workflow 'url_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --url "https://80000hours.org/2015/06/whats-the-best-way-to-spend-20000-to-help-the-common-good/"
 
 ### Run adhoc searches
 python main.py --workflow 'queries_adhoc' --directory "/Users/Govind/Desktop/DB/code/v1-digitalbrain/" --queries "Who is the founder of YCombinator?; What is web3?"
